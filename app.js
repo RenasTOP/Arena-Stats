@@ -32,6 +32,9 @@ const modalBody = document.getElementById("modal-body");
 const closeBtn  = document.getElementById("close-modal");
 if (closeBtn) closeBtn.addEventListener("click", () => (overlay.hidden = true));
 if (overlay) overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.hidden = true; });
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && overlay && !overlay.hidden) overlay.hidden = true;
+});
 
 // state
 let LAST_MATCHES = [];
