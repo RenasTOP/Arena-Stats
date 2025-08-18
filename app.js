@@ -1,11 +1,11 @@
 // app.js
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
 const ARENA_QUEUE = 1700;
-const MATCH_COUNT = 120; // initial pull
+const MATCH_COUNT = 120;
 
-const CHUNK_SIZE = 10;        // 10–20 is safe
-const CHUNK_DELAY_MS = 700;   // pause between chunks to avoid 429s
-const PAGE_MORE = 200;        // "Load next" count
+const CHUNK_SIZE = 10;
+const CHUNK_DELAY_MS = 700;
+const PAGE_MORE = 200;
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -16,15 +16,16 @@ const statusBox = document.getElementById("status");
 const summaryBox = document.getElementById("summary");
 const matchesBox = document.getElementById("matches");
 const filters = document.getElementById("filters");
-const progressWrap = document.getElementById("progress");
-const progComplete = document.getElementById("progress-complete");
-const progPending = document.getElementById("progress-pending");
-const hardestBox = document.getElementById("hardest");
 
-// actions (pagination)
 const actions = document.getElementById("actions");
 const btnMore  = document.getElementById("load-more");
 const btnAll   = document.getElementById("load-all");
+
+// visuals
+const viz = document.getElementById("viz");
+const placementChart = document.getElementById("placement-chart");
+const firstChampsBox = document.getElementById("first-champs");
+const firstCountEl   = document.getElementById("first-count");
 
 // modal
 const overlay   = document.getElementById("overlay");
@@ -32,9 +33,10 @@ const modalBody = document.getElementById("modal-body");
 const closeBtn  = document.getElementById("close-modal");
 if (closeBtn) closeBtn.addEventListener("click", () => (overlay.hidden = true));
 if (overlay) overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.hidden = true; });
-window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && overlay && !overlay.hidden) overlay.hidden = true;
-});
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay && !overlay.hidden) overlay.hidden = true; });
+
+// hardest box
+const hardestBox = document.getElementById("hardest");
 
 // state
 let LAST_MATCHES = [];
@@ -43,27 +45,17 @@ let CURRENT_PUUID = null;
 let CURRENT_PLAYER_TAG = "";
 let NEXT_START = 0;
 
-// safe binds for pagination buttons
+// events
 if (btnMore) btnMore.addEventListener("click", () => loadMorePages(PAGE_MORE));
 if (btnAll)  btnAll.addEventListener("click", () => loadAllPages());
 
-// ---------- Data Dragon + asset helpers ----------
+// ---------- Data Dragon ----------
 let DD_VERSION = "15.16.1";
 const NAME_FIX = {
-  FiddleSticks: "Fiddlesticks",
-  Wukong: "MonkeyKing",
-  KhaZix: "Khazix",
-  VelKoz: "Velkoz",
-  ChoGath: "Chogath",
-  KaiSa: "Kaisa",
-  LeBlanc: "Leblanc",
-  DrMundo: "DrMundo",
-  Nunu: "Nunu",
-  Renata: "Renata",
-  RekSai: "RekSai",
-  KogMaw: "KogMaw",
-  BelVeth: "Belveth",
-  TahmKench: "TahmKench",
+  FiddleSticks: "Fiddlesticks", Wukong: "MonkeyKing", KhaZix: "Khazix",
+  VelKoz: "Velkoz", ChoGath: "Chogath", KaiSa: "Kaisa", LeBlanc: "Leblanc",
+  DrMundo: "DrMundo", Nunu: "Nunu", Renata: "Renata", RekSai: "RekSai",
+  KogMaw: "KogMaw", BelVeth: "Belveth", TahmKench: "TahmKench",
 };
 async function initDDragon() {
   try {
@@ -82,15 +74,9 @@ function itemIcon(id) {
   if (!id || id === 0) return "";
   return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/item/${id}.png`;
 }
-function ordinal(n) {
-  if (n === 1) return "1st";
-  if (n === 2) return "2nd";
-  if (n === 3) return "3rd";
-  if (!Number.isFinite(n)) return "—";
-  return `${n}th`;
-}
+function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "—"; return `${n}th`; }
 
-// ---------- URL helpers (shareable links) ----------
+// ---------- URL helpers ----------
 function getParam(name) { return new URLSearchParams(location.search).get(name); }
 function setParam(name, v) {
   const u = new URL(location.href);
@@ -102,7 +88,7 @@ function prefillFromURL() {
   const id = getParam("id");
   if (id) {
     riotIdInput.value = id;
-    setTimeout(()=>form.dispatchEvent(new Event("submit", { cancelable:true })), 0);
+    setTimeout(()=>form.dispatchEvent(new Event("submit", {cancelable:true})), 0);
   }
 }
 
@@ -124,7 +110,7 @@ async function fetchMatchesInChunks(ids, puuid) {
     const part = await fetchJSON(`${API_BASE}/matches?ids=${slice.join(",")}&puuid=${puuid}`);
     out = out.concat(part);
 
-    // live update so users see progress
+    // live update
     LAST_MATCHES = out.slice().sort((a,b)=>b.gameStart - a.gameStart);
     renderMatches(LAST_MATCHES);
 
@@ -152,7 +138,6 @@ async function fetchIdsPaged(puuid, total, queue = ARENA_QUEUE) {
   return all;
 }
 
-// fetch a specific RANGE of ids starting at "startFrom", up to "totalNeeded"
 async function fetchIdsRange(puuid, startFrom, totalNeeded, queue = ARENA_QUEUE) {
   const ids = [];
   let start = startFrom;
@@ -166,7 +151,7 @@ async function fetchIdsRange(puuid, startFrom, totalNeeded, queue = ARENA_QUEUE)
     ids.push(...batch);
     start += batch.length;
     await sleep(300);
-    if (batch.length < count) break; // Riot returned fewer than requested: end
+    if (batch.length < count) break;
   }
   return { ids, nextStart: start };
 }
@@ -183,7 +168,7 @@ function dedupeById(list) {
   return out;
 }
 
-// ---------- UI wiring ----------
+// ---------- Filters & clicks ----------
 filters.addEventListener("click", (e) => {
   if (e.target.tagName !== "BUTTON") return;
   [...filters.querySelectorAll("button")].forEach(b => b.classList.remove("active"));
@@ -192,7 +177,6 @@ filters.addEventListener("click", (e) => {
   renderMatches(filterMatches(mode));
 });
 
-// make match cards clickable (open modal)
 matchesBox.addEventListener("click", (e) => {
   const card = e.target.closest("article.item");
   if (!card) return;
@@ -223,7 +207,7 @@ async function loadMorePages(amount) {
 
   LAST_MATCHES = dedupeById(LAST_MATCHES.concat(newMatches)).sort((a,b)=>b.gameStart - a.gameStart);
   PROGRESS = buildProgress(LAST_MATCHES);
-  updateSummaryFromProgress();
+  updateSummaryAndVisuals();
   renderMatches(LAST_MATCHES);
 
   NEXT_START = nextStart;
@@ -252,7 +236,7 @@ async function loadAllPages() {
 
     LAST_MATCHES = dedupeById(LAST_MATCHES.concat(newMatches)).sort((a,b)=>b.gameStart - a.gameStart);
     PROGRESS = buildProgress(LAST_MATCHES);
-    updateSummaryFromProgress();
+    updateSummaryAndVisuals();
     renderMatches(LAST_MATCHES);
 
     NEXT_START = nextStart;
@@ -265,24 +249,54 @@ async function loadAllPages() {
       nextStart: NEXT_START,
     });
 
-    await sleep(1000); // be gentle to Riot
+    await sleep(1000);
   }
 }
 
-// ---------- Summary + progress ----------
-function updateSummaryFromProgress() {
+// ---------- Summary + visuals ----------
+function updateSummaryAndVisuals() {
+  // progress
   const uniqueChamps = Object.keys(PROGRESS).length;
   const completed = Object.values(PROGRESS).filter(p => p.completed).length;
-  const remaining = uniqueChamps - completed;
-  const places = LAST_MATCHES.map(m => m.placement).filter(Number.isFinite);
-  const avgPlace = places.length ? (places.reduce((a,b)=>a+b,0)/places.length).toFixed(2) : "0.00";
+  const arenaGodNeeded = Math.max(0, 60 - completed);
+
+  const places = LAST_MATCHES.map(m => Number(m.placement)).filter(x => Number.isFinite(x));
+  const avgPlace = places.length ? (places.reduce((a,b)=>a+b,0) / places.length).toFixed(2) : "0.00";
 
   summaryBox.innerHTML = [
     tile(CURRENT_PLAYER_TAG, "Player"),
-    tile(`${completed} champions 1st`, "Completed"),
-    tile(`${remaining} still trying`, "In progress"),
-    tile(`${avgPlace} average place`, "Across matches"),
+    tile(`${LAST_MATCHES.length}`, "Total Arena games (loaded)"),
+    tile(`${avgPlace}`, "Average place"),
+    tile(`${completed}/60`, `Arena God (${arenaGodNeeded} left)`),
   ].join("");
+
+  // placements chart
+  const counts = Array(8).fill(0);
+  for (const p of places) if (p >= 1 && p <= 8) counts[p-1]++;
+  renderPlacementChart(counts);
+
+  // first-place champs grid
+  renderFirstChamps(PROGRESS);
+
+  // hardest 1st
+  const hardest = Object.values(PROGRESS)
+    .filter(p => p.completed)
+    .sort((a,b)=>b.attemptsUntilFirst - a.attemptsUntilFirst)
+    .slice(0,10);
+  hardestBox.hidden = false;
+  hardestBox.innerHTML = `
+    <div class="section-title">
+      <strong>Hardest 1st places by attempts</strong>
+      <span class="small">${hardest.length}</span>
+    </div>
+    <div class="list">
+      ${hardest.map(p => `
+        <span class="tag"><img src="${champIcon(p.name)}" alt="${p.name}">${p.name} · ${p.attemptsUntilFirst}</span>
+      `).join("")}
+    </div>
+  `;
+
+  viz.hidden = false;
 }
 
 function buildProgress(matches){
@@ -303,36 +317,32 @@ function buildProgress(matches){
   return out;
 }
 
-// ---------- Rendering ----------
-function renderComplete(progress){
-  const done = Object.values(progress).filter(p => p.completed).sort((a,b)=>a.when - b.when);
-  return `
-    <div class="section-title">
-      <strong>Champions completed</strong>
-      <span class="small">${done.length}</span>
-    </div>
-    <div class="list">
-      ${done.map(p => `
-        <span class="tag"><img src="${champIcon(p.name)}" alt="${p.name}">${p.name} · ${p.attemptsUntilFirst} tries</span>
-      `).join("")}
-    </div>
-  `;
-}
-function renderPending(progress){
-  const todo = Object.values(progress).filter(p => !p.completed).sort((a,b)=>b.attemptsSoFar - a.attemptsSoFar);
-  return `
-    <div class="section-title">
-      <strong>Still trying</strong>
-      <span class="small">${todo.length}</span>
-    </div>
-    <div class="list">
-      ${todo.map(p => `
-        <span class="tag"><img src="${champIcon(p.name)}" alt="${p.name}">${p.name} · ${p.attemptsSoFar} tries</span>
-      `).join("")}
-    </div>
-  `;
+function renderPlacementChart(counts){
+  const max = Math.max(1, ...counts);
+  placementChart.innerHTML = counts.map((c, i) => {
+    const h = Math.round((c / max) * 100);
+    return `
+      <div class="bar" style="--h:${h}%">
+        <div class="bar-fill"></div>
+        <div class="bar-count">${c}</div>
+        <div class="bar-label">${i+1}</div>
+      </div>
+    `;
+  }).join("");
 }
 
+function renderFirstChamps(progress){
+  const done = Object.values(progress).filter(p => p.completed).sort((a,b)=>a.when - b.when);
+  firstCountEl.textContent = String(done.length);
+  firstChampsBox.innerHTML = done.map(p => `
+    <div class="champ" title="${p.name}">
+      <img src="${champIcon(p.name)}" alt="${p.name}">
+      <div class="check">✓</div>
+    </div>
+  `).join("");
+}
+
+// ---------- Rendering ----------
 function renderMatches(list) {
   matchesBox.innerHTML = list.map(m => {
     const place = Number(m.placement);
@@ -355,7 +365,7 @@ function renderMatches(list) {
   }).join("");
 }
 
-// ---------- Modal (full match stats) ----------
+// ---------- Modal ----------
 async function openMatchModal(matchId) {
   try {
     status("Loading match…");
@@ -433,7 +443,7 @@ function renderMatchModal(match) {
   `;
 }
 
-// ---------- Form submit ----------
+// ---------- Submit ----------
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const raw = riotIdInput.value.trim();
@@ -446,20 +456,20 @@ form.addEventListener("submit", async (e) => {
   await initDDragon();
 
   try {
-    // 1) account
+    // account
     const acc = await fetchJSON(
       `${API_BASE}/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`
     );
     CURRENT_PUUID = acc.puuid;
     CURRENT_PLAYER_TAG = `${acc.gameName}#${acc.tagLine}`;
 
-    // 2) try to render cached matches instantly
+    // cached
     const cached = loadCache(acc.puuid);
     if (cached?.matches?.length) {
       LAST_MATCHES = cached.matches;
       PROGRESS = buildProgress(LAST_MATCHES);
       NEXT_START = cached.nextStart ?? cached.matches.length ?? 0;
-      updateSummaryFromProgress();
+      updateSummaryAndVisuals();
       renderMatches(LAST_MATCHES);
       filters.hidden = false;
       actions.hidden = false;
@@ -468,21 +478,21 @@ form.addEventListener("submit", async (e) => {
       NEXT_START = 0;
     }
 
-    // 3) fetch newest IDs
+    // newest IDs
     status("Fetching match IDs…");
     const ids = await fetchIdsPaged(acc.puuid, MATCH_COUNT, ARENA_QUEUE);
     if (!ids.length) { status("No Arena matches found for this player."); return; }
 
-    // 4) figure out which IDs are NEW since last time
-    let newIds = ids;              // default: all
+    // which are new
+    let newIds = ids;
     let merged = [];
     if (cached?.matches?.length && cached.latestId) {
-      const idx = ids.indexOf(cached.latestId); // ids are newest → oldest
-      newIds = idx === -1 ? ids : ids.slice(0, idx); // only until we hit last known
-      merged = cached.matches.slice();              // keep cached as base
+      const idx = ids.indexOf(cached.latestId);
+      newIds = idx === -1 ? ids : ids.slice(0, idx);
+      merged = cached.matches.slice();
     }
 
-    // 5) fetch details only for new IDs (if any)
+    // fetch details for new
     let newlyFetched = [];
     if (newIds.length) {
       status(`Fetching match details… 0/${newIds.length}`);
@@ -490,47 +500,25 @@ form.addEventListener("submit", async (e) => {
       newlyFetched.sort((a,b)=>b.gameStart - a.gameStart);
     }
 
-    // 6) compute final list (new + old) or first-time pull everything
+    // final list
     if (cached?.matches?.length) {
       LAST_MATCHES = dedupeById((newlyFetched.length ? newlyFetched.concat(merged) : merged));
       LAST_MATCHES.sort((a,b)=>b.gameStart - a.gameStart);
-      // keep NEXT_START from cache (where to continue for Load more)
     } else {
       const full = newlyFetched.length ? newlyFetched : await fetchMatchesInChunks(ids, acc.puuid);
       LAST_MATCHES = dedupeById(full).sort((a,b)=>b.gameStart - a.gameStart);
-      NEXT_START = LAST_MATCHES.length; // continue from here
+      NEXT_START = LAST_MATCHES.length;
     }
 
-    // 7) recompute summary + progress
+    // visuals + UI
     PROGRESS = buildProgress(LAST_MATCHES);
-    updateSummaryFromProgress();
-
-    // 8) show UI
-    progressWrap.hidden = false;
-    progComplete.innerHTML = renderComplete(PROGRESS);
-    progPending.innerHTML = renderPending(PROGRESS);
-
-    // Hardest top 10
-    const hardest = Object.values(PROGRESS)
-      .filter(p => p.completed)
-      .sort((a,b)=>b.attemptsUntilFirst - a.attemptsUntilFirst)
-      .slice(0,10);
-    hardestBox.hidden = false;
-    hardestBox.innerHTML = `
-      <div class="section-title"><strong>Top 10 hardest to get 1st</strong><span class="small">by attempts</span></div>
-      <div class="list">
-        ${hardest.map(p => `
-          <span class="tag"><img src="${champIcon(p.name)}" alt="${p.name}">${p.name} · ${p.attemptsUntilFirst}</span>
-        `).join("")}
-      </div>
-    `;
-
+    updateSummaryAndVisuals();
     filters.hidden = false;
     actions.hidden = false;
     renderMatches(LAST_MATCHES);
     status("");
 
-    // 9) save cache for next time
+    // save
     saveCache(acc.puuid, {
       latestId: ids[0] || cached?.latestId || null,
       matches: LAST_MATCHES,
@@ -544,7 +532,7 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
-// ---------- Small utils ----------
+// ---------- Utils ----------
 function tile(big, label) { return `<div class="tile"><div class="big kpi">${big}</div><div class="label">${label}</div></div>`; }
 function status(t) { statusBox.textContent = t; }
 function resetUI() {
@@ -552,11 +540,12 @@ function resetUI() {
   matchesBox.innerHTML = "";
   filters.hidden = true;
   actions.hidden = true;
-  progressWrap.hidden = true;
+  viz.hidden = true;
   hardestBox.hidden = true;
+  firstChampsBox.innerHTML = "";
+  placementChart.innerHTML = "";
   status("");
 }
-
 function timeAgo(ts) {
   if (!ts) return "unknown";
   const s = Math.max(1, Math.floor((Date.now() - Number(ts)) / 1000));
@@ -567,7 +556,6 @@ function timeAgo(ts) {
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
 }
-
 async function fetchJSON(url) {
   const r = await fetch(url);
   if (!r.ok) {
