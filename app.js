@@ -38,6 +38,15 @@ async function fetchIdsPaged(puuid, total, queue = ARENA_QUEUE) {
   return all;
 }
 
+function cacheKey(puuid){ return `arena_cache:${puuid}`; }
+function loadCache(puuid){
+  try { return JSON.parse(localStorage.getItem(cacheKey(puuid)) || "null"); } catch { return null; }
+}
+function saveCache(puuid, data){
+  try { localStorage.setItem(cacheKey(puuid), JSON.stringify(data)); } catch {}
+}
+
+
 
 // --- URL helpers (shareable links) ---
 function getParam(name) { return new URLSearchParams(location.search).get(name); }
@@ -139,40 +148,86 @@ form.addEventListener("submit", async (e) => {
   await initDDragon();
 
   try {
-    const acc = await fetchJSON(`${API_BASE}/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`);
+    // 1) account
+    const acc = await fetchJSON(
+      `${API_BASE}/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`
+    );
 
-    status("Fetching match ids...");
+    // 2) try to render cached matches instantly (if we have them)
+    const cached = loadCache(acc.puuid);
+    if (cached?.matches?.length) {
+      LAST_MATCHES = cached.matches;
+      PROGRESS = buildProgress(LAST_MATCHES);
+
+      const uniqueChamps = Object.keys(PROGRESS).length;
+      const completed = Object.values(PROGRESS).filter(p => p.completed).length;
+      const remaining = uniqueChamps - completed;
+      const places = LAST_MATCHES.map(m => m.placement).filter(Number.isFinite);
+      const avgPlace = places.length ? (places.reduce((a,b)=>a+b,0)/places.length).toFixed(2) : "0.00";
+
+      summaryBox.innerHTML = [
+        tile(`${acc.gameName}#${acc.tagLine}`, "Player"),
+        tile(`${completed} champions 1st`, "Completed"),
+        tile(`${remaining} still trying`, "In progress"),
+        tile(`${avgPlace} average place`, "Across matches"),
+      ].join("");
+
+      renderMatches(LAST_MATCHES);
+      filters.hidden = false;
+      status("Refreshing…");
+    }
+
+    // 3) fetch newest IDs (paged)
+    status("Fetching match ids…");
     const ids = await fetchIdsPaged(acc.puuid, MATCH_COUNT, ARENA_QUEUE);
+    if (!ids.length) { status("No Arena matches found for this player."); return; }
 
-    status("Fetching match details...");
-    const all = await fetchMatchesInChunks(ids, acc.puuid);
-    LAST_MATCHES = all.sort((a,b)=>b.gameStart - a.gameStart);
+    // 4) figure out which IDs are NEW since last time
+    let newIds = ids;              // default: all
+    let merged = [];
+    if (cached?.matches?.length && cached.latestId) {
+      const idx = ids.indexOf(cached.latestId); // ids are newest → oldest
+      newIds = idx === -1 ? ids : ids.slice(0, idx); // only until we hit last known
+      merged = cached.matches.slice();              // keep cached as base
+    }
 
-    // Build progress per champion
+    // 5) fetch details only for new IDs (live rendering already happens in fetchMatchesInChunks)
+    let newlyFetched = [];
+    if (newIds.length) {
+      status(`Fetching match details… 0/${newIds.length}`);
+      newlyFetched = await fetchMatchesInChunks(newIds, acc.puuid);
+      newlyFetched.sort((a,b)=>b.gameStart - a.gameStart);
+    }
+
+    // 6) compute final list (new + old), else first-time pull everything
+    if (cached?.matches?.length) {
+      LAST_MATCHES = (newlyFetched.length ? newlyFetched.concat(merged) : merged).slice(0, MATCH_COUNT);
+    } else {
+      const full = newlyFetched.length ? newlyFetched : await fetchMatchesInChunks(ids, acc.puuid);
+      LAST_MATCHES = full.slice(0, MATCH_COUNT).sort((a,b)=>b.gameStart - a.gameStart);
+    }
+
+    // 7) recompute summary + progress
     PROGRESS = buildProgress(LAST_MATCHES);
-
-    // Summary tiles
-    const total = LAST_MATCHES.length;
     const uniqueChamps = Object.keys(PROGRESS).length;
     const completed = Object.values(PROGRESS).filter(p => p.completed).length;
     const remaining = uniqueChamps - completed;
-    const firsts = completed;
     const places = LAST_MATCHES.map(m => m.placement).filter(Number.isFinite);
     const avgPlace = places.length ? (places.reduce((a,b)=>a+b,0)/places.length).toFixed(2) : "0.00";
 
     summaryBox.innerHTML = [
       tile(`${acc.gameName}#${acc.tagLine}`, "Player"),
-      tile(`${firsts} champions 1st`, "Completed"),
+      tile(`${completed} champions 1st`, "Completed"),
       tile(`${remaining} still trying`, "In progress"),
       tile(`${avgPlace} average place`, "Across matches"),
     ].join("");
 
-    // Progress panes
+    // 8) progress panes
     progressWrap.hidden = false;
     progComplete.innerHTML = renderComplete(PROGRESS);
     progPending.innerHTML = renderPending(PROGRESS);
 
-    // Hardest top 10
+    // 9) hardest top 10
     const hardest = Object.values(PROGRESS)
       .filter(p => p.completed)
       .sort((a,b)=>b.attemptsUntilFirst - a.attemptsUntilFirst)
@@ -187,13 +242,18 @@ form.addEventListener("submit", async (e) => {
       </div>
     `;
 
-    // Filters visible
-    filters.hidden = false;
-
-    // Match cards with placement badge
+    // 10) show matches (you already live-render per chunk; this ensures final order)
     renderMatches(LAST_MATCHES);
-
+    filters.hidden = false;
     status("");
+
+    // 11) save cache for next time
+    saveCache(acc.puuid, {
+      latestId: ids[0] || cached?.latestId || null, // newest ID we saw at the top
+      matches: LAST_MATCHES,
+      updatedAt: Date.now(),
+    });
+
   } catch (err) {
     console.error(err);
     status(err.message || "Error");
