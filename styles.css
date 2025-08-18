@@ -71,3 +71,37 @@ button:hover { filter: brightness(1.05); }
 .actions { display:flex; gap:10px; margin:10px 0; }
 button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
 
+/* clickable cards */
+.item { cursor: pointer; transition: transform .08s ease, background .12s ease; }
+.item:hover { transform: translateY(-1px); background: #121823; }
+
+/* modal */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55);
+  display: grid; place-items: center; z-index: 1000;
+}
+.modal {
+  width: min(900px, 95vw); max-height: 85vh; overflow: auto;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.6);
+}
+.modal .close {
+  position: sticky; top: 0; float: right;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text); border-radius: 8px; padding: 4px 10px; cursor: pointer;
+}
+.modal-body { padding: 8px 2px 4px; }
+.modal h3 { margin: 0 0 10px; }
+.table {
+  width: 100%; border-collapse: collapse; font-size: .95rem;
+}
+.table th, .table td {
+  border-bottom: 1px solid var(--border); padding: 8px 6px; text-align: left;
+}
+.row-me { background: #0e1a25; }
+.badge.sm { font-size: .78rem; padding: 1px 6px; }
+.item-icons { display: flex; gap: 6px; }
+.item-icons img { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--border); background:#0b1118; }
+
+
