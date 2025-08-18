@@ -1,15 +1,56 @@
-* { box-sizing: border-box; font-family: system-ui, Arial; }
-body { margin: 0; background:#0f1216; color:#e6edf3; }
-.container { max-width: 900px; margin: 32px auto; padding: 0 16px; }
-h1 { margin-bottom: 16px; }
-form { display:flex; gap:8px; margin-bottom:16px; }
-input { flex:1; padding:10px 12px; border-radius:8px; border:1px solid #2d333b; background:#161b22; color:#e6edf3; }
-button { padding:10px 14px; border-radius:8px; border:0; background:#238636; color:white; cursor:pointer; }
+* { box-sizing: border-box; }
+:root {
+  --bg: #0f1216;
+  --panel: #0f141b;
+  --text: #e6edf3;
+  --muted: #9aa4ad;
+  --border: #2d333b;
+  --green: #238636;
+  --red: #b33a3a;
+  --chip: #1b2330;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+.container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+.header { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+h1 { margin: 0 0 12px 0; letter-spacing: .3px; }
+.search { display: flex; gap: 10px; margin: 8px 0 16px; }
+input { flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: #161b22; color: var(--text); }
+button { padding: 11px 16px; border-radius: 10px; border: 0; background: var(--green); color: white; cursor: pointer; }
 button:hover { filter: brightness(1.05); }
-.card { padding:16px; border:1px solid #2d333b; border-radius:12px; background:#0f141b; }
-.grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:12px; margin-top:16px; }
-.item { padding:12px; border:1px solid #2d333b; border-radius:10px; background:#0f141b; }
-.small { opacity:.85; font-size:.9rem; }
-.badge { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #2d333b; margin-left:6px; }
-.win { background:#183220; }
-.loss { background:#2a1717; }
+
+#status { min-height: 22px; color: var(--muted); margin: 6px 0 10px; }
+
+.card { padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); }
+.summary { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 10px; }
+.summary .tile { border: 1px solid var(--border); background: #0e131a; border-radius: 12px; padding: 12px; }
+.summary .big { font-size: 1.5rem; font-weight: 700; }
+.summary .label { color: var(--muted); font-size: .9rem; }
+
+.top-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; }
+#top-champs, #recent-record { display: grid; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: var(--chip); border: 1px solid var(--border); }
+.chip img { width: 18px; height: 18px; border-radius: 4px; }
+
+.filters { display: flex; gap: 8px; }
+.filters button { background: #202736; border: 1px solid var(--border); }
+.filters button.active { background: var(--green); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
+.item { padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); display: grid; grid-template-columns: 44px 1fr; gap: 10px; }
+.icon { width: 44px; height: 44px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+.icon img { width: 100%; height: 100%; object-fit: cover; }
+.head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: .85rem; }
+.win { background: #183220; color: #9fd3a6; }
+.loss { background: #2a1717; color: #e0a3a3; }
+.small { color: var(--muted); font-size: .92rem; }
+.row { display: flex; align-items: center; gap: 8px; }
+
+.footer { max-width: 1100px; margin: 28px auto; padding: 0 16px 24px; color: var(--muted); }
+
+@media (max-width: 700px) {
+  .summary { grid-template-columns: repeat(2, 1fr); }
+  .top-row { grid-template-columns: 1fr; }
+}
