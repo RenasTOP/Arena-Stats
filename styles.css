@@ -54,3 +54,17 @@ button:hover { filter: brightness(1.05); }
   .summary { grid-template-columns: repeat(2, 1fr); }
   .top-row { grid-template-columns: 1fr; }
 }
+/* keep your existing styles, add these extras */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.section-title { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.kpi { font-size:1.6rem; font-weight:700; }
+.badge.p1 { background:#1f3c1f; color:#a9e6b0; }
+.badge.p2 { background:#1c2a4a; color:#a9c8ff; }
+.badge.p3 { background:#3a2a1a; color:#f2c69a; }
+.badge.px { background:#2a2a2a; color:#cfcfcf; }
+.list { display:flex; flex-wrap:wrap; gap:8px; }
+.tag { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; background:#1b2330; border:1px solid var(--border); }
+.tag img { width:18px; height:18px; border-radius:4px; }
+.item .place { font-weight:600; }
+@media (max-width: 900px){ .grid-2{ grid-template-columns:1fr; } }
+
