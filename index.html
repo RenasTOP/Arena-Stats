@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Arena Stats</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Arena Stats Lookup</h1>
+    <form id="search-form">
+      <input id="riotid" placeholder="Riot ID, e.g. Renas#EUW" required />
+      <button type="submit">Search</button>
+    </form>
+
+    <section id="status"></section>
+    <section id="summary" class="card"></section>
+    <section id="matches" class="grid"></section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
