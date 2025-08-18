@@ -16,8 +16,8 @@ const actions = document.getElementById("actions");
 const btnMore  = document.getElementById("load-more");
 const btnAll   = document.getElementById("load-all");
 
-btnMore.addEventListener("click", () => loadMorePages(PAGE_MORE));
-btnAll.addEventListener("click", () => loadAllPages());
+if (btnMore) btnMore.addEventListener("click", () => loadMorePages(PAGE_MORE));
+if (btnAll)  btnAll.addEventListener("click", () => loadAllPages());
 
 async function fetchMatchesInChunks(ids, puuid) {
   let out = [];
