@@ -2,6 +2,22 @@ const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
 const ARENA_QUEUE = 1700;
 const MATCH_COUNT = 100; // pull more so progress per champion is meaningful
 
+const CHUNK_SIZE = 20;        // keep ≤25 so each Worker call stays <50 subrequests
+const CHUNK_DELAY_MS = 120;   // small pause between chunks (be nice to Riot)
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+async function fetchMatchesInChunks(ids, puuid){
+  let out = [];
+  for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+    const slice = ids.slice(i, i + CHUNK_SIZE);
+    const part = await fetchJSON(`${API_BASE}/matches?ids=${slice.join(",")}&puuid=${puuid}`);
+    out = out.concat(part);
+    if (i + CHUNK_SIZE < ids.length) await sleep(CHUNK_DELAY_MS);
+  }
+  return out;
+}
+
 // Data Dragon version and icon helper
 let DD_VERSION = "15.16.1";
 const NAME_FIX = {
@@ -90,7 +106,7 @@ form.addEventListener("submit", async (e) => {
     const ids = await fetchJSON(`${API_BASE}/match-ids?puuid=${acc.puuid}&queue=${ARENA_QUEUE}&count=${MATCH_COUNT}`);
 
     status("Fetching match details...");
-    const all = await fetchJSON(`${API_BASE}/matches?ids=${ids.join(",")}&puuid=${acc.puuid}`);
+    const all = await fetchMatchesInChunks(ids, acc.puuid);
     LAST_MATCHES = all.sort((a,b)=>b.gameStart - a.gameStart);
 
     // Build progress per champion
