@@ -18,6 +18,23 @@ async function fetchMatchesInChunks(ids, puuid) {
   return out;
 }
 
+// --- URL helpers (shareable links) ---
+function getParam(name) { return new URLSearchParams(location.search).get(name); }
+function setParam(name, v) {
+  const u = new URL(location.href);
+  if (v == null || v === "") u.searchParams.delete(name);
+  else u.searchParams.set(name, v);
+  history.replaceState({}, "", u.toString());
+}
+function prefillFromURL() {
+  const id = getParam("id");
+  if (id) {
+    riotIdInput.value = id;
+    // auto submit after a tick so the DOM is ready
+    setTimeout(()=>form.dispatchEvent(new Event("submit", {cancelable:true})), 0);
+  }
+}
+
 // Data Dragon version and icon helper
 let DD_VERSION = "15.16.1";
 const NAME_FIX = {
@@ -94,6 +111,7 @@ form.addEventListener("submit", async (e) => {
   const raw = riotIdInput.value.trim();
   if (!raw.includes("#")) { alert("Write your Riot ID like Name#TAG"); return; }
   const [gameName, tagLine] = raw.split("#");
+  setParam("id", `${gameName}#${tagLine}`);
   resetUI();
   status("Loading, fetching account...");
 
@@ -256,9 +274,13 @@ function timeAgo(ts) {
 async function fetchJSON(url) {
   const r = await fetch(url);
   if (!r.ok) {
-    let msg = `Request failed, ${r.status}`;
-    try { msg += `, ${await r.text()}`; } catch {}
-    throw new Error(msg);
+    const text = await r.text().catch(()=> "");
+    if (r.status === 429 || /Riot 429/i.test(text)) {
+      throw new Error("Riot is rate limiting right now. Please wait ~1–2 minutes and try again.");
+    }
+    throw new Error(`Request failed, ${r.status}${text ? `, ${text}` : ""}`);
   }
   return r.json();
 }
+
+prefillFromURL();
