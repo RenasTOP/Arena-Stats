@@ -14,6 +14,8 @@ async function fetchMatchesInChunks(ids, puuid) {
     status(`Fetching match details… ${Math.min(i + CHUNK_SIZE, ids.length)}/${ids.length}`);
     const part = await fetchJSON(`${API_BASE}/matches?ids=${slice.join(",")}&puuid=${puuid}`);
     out = out.concat(part);
+    LAST_MATCHES = out.slice().sort((a,b)=>b.gameStart - a.gameStart);
+    renderMatches(LAST_MATCHES);
     if (i + CHUNK_SIZE < ids.length) await sleep(CHUNK_DELAY_MS);
   }
   return out;
