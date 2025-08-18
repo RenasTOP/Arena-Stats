@@ -8,17 +8,36 @@
 </head>
 <body>
   <main class="container">
-    <h1>Arena Stats Lookup</h1>
-    <form id="search-form">
+    <header class="header">
+      <h1>Arena Stats Lookup</h1>
+      <nav class="filters" id="filters" hidden>
+        <button data-filter="all" class="active">All</button>
+        <button data-filter="wins">Wins</button>
+        <button data-filter="losses">Losses</button>
+      </nav>
+    </header>
+
+    <form id="search-form" class="search">
       <input id="riotid" placeholder="Riot ID, e.g. Renas#EUW" required />
       <button type="submit">Search</button>
     </form>
 
     <section id="status"></section>
-    <section id="summary" class="card"></section>
+
+    <section id="summary" class="card summary"></section>
+
+    <section id="tops" class="top-row" hidden>
+      <div class="card" id="top-champs"></div>
+      <div class="card" id="recent-record"></div>
+    </section>
+
     <section id="matches" class="grid"></section>
   </main>
-  <script src="app.js?v=4"></script>
-  <script> document.getElementById("status").textContent = "Ready";</script>
+
+  <footer class="footer">
+    <small>Powered by Riot Games API, icons by Data Dragon</small>
+  </footer>
+
+  <script src="app.js?v=5"></script>
 </body>
 </html>
