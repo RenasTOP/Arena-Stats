@@ -1,9 +1,9 @@
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
 const ARENA_QUEUE = 1700;
-const MATCH_COUNT = 80; // pull more so progress per champion is meaningful
+const MATCH_COUNT = 400; // pull more so progress per champion is meaningful
 
 const CHUNK_SIZE = 10;        // 10–20 is safe
-const CHUNK_DELAY_MS = 500;   // pause between chunks to avoid 429s
+const CHUNK_DELAY_MS = 700;   // pause between chunks to avoid 429s
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -11,12 +11,32 @@ async function fetchMatchesInChunks(ids, puuid) {
   let out = [];
   for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
     const slice = ids.slice(i, i + CHUNK_SIZE);
+    status(`Fetching match details… ${Math.min(i + CHUNK_SIZE, ids.length)}/${ids.length}`);
     const part = await fetchJSON(`${API_BASE}/matches?ids=${slice.join(",")}&puuid=${puuid}`);
     out = out.concat(part);
     if (i + CHUNK_SIZE < ids.length) await sleep(CHUNK_DELAY_MS);
   }
   return out;
 }
+
+async function fetchIdsPaged(puuid, total, queue = ARENA_QUEUE) {
+  const all = [];
+  let start = 0;
+  const PER = 100;               // Riot limit per call
+  while (all.length < total) {
+    const count = Math.min(PER, total - all.length);
+    const batch = await fetchJSON(
+      `${API_BASE}/match-ids?puuid=${puuid}&queue=${queue}&start=${start}&count=${count}`
+    );
+    if (!batch.length) break;
+    all.push(...batch);
+    start += batch.length;
+    // small pause to be nice to Riot
+    await sleep(300);
+  }
+  return all;
+}
+
 
 // --- URL helpers (shareable links) ---
 function getParam(name) { return new URLSearchParams(location.search).get(name); }
@@ -121,7 +141,7 @@ form.addEventListener("submit", async (e) => {
     const acc = await fetchJSON(`${API_BASE}/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`);
 
     status("Fetching match ids...");
-    const ids = await fetchJSON(`${API_BASE}/match-ids?puuid=${acc.puuid}&queue=${ARENA_QUEUE}&count=${MATCH_COUNT}`);
+    const ids = await fetchIdsPaged(acc.puuid, MATCH_COUNT, ARENA_QUEUE);
 
     status("Fetching match details...");
     const all = await fetchMatchesInChunks(ids, acc.puuid);
