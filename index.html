@@ -9,17 +9,17 @@
 <body>
   <main class="container">
     <header class="header">
-      <h1>Arena Stats Lookup</h1>
+      <h1>Arena Progress Tracker</h1>
       <nav class="filters" id="filters" hidden>
         <button data-filter="all" class="active">All</button>
         <button data-filter="top3">Top 3</button>
-        <button data-filter="firsts">1st only</button>
-        <button data-filter="inprogress">Still trying</button>
+        <button data-filter="firsts">1st place</button>
+        <button data-filter="inprogress">Left for Arena God</button>
       </nav>
     </header>
 
     <form id="search-form" class="search">
-      <input id="riotid" placeholder="Riot ID, e.g. Renas#EUW" required />
+      <input id="riotid" placeholder="Riot ID (e.g., Renas#CHEGA)" required />
       <button type="submit">Search</button>
     </form>
 
@@ -40,10 +40,17 @@
     <section id="hardest" class="card" hidden></section>
 
     <section id="matches" class="grid"></section>
+<!-- Match details modal -->
+<div id="overlay" class="overlay" hidden>
+  <div class="modal">
+    <button class="close" id="close-modal" aria-label="Close">×</button>
+    <div id="modal-body" class="modal-body"></div>
+  </div>
+</div>
   </main>
 
   <footer class="footer">
-    <small>Powered by Riot Games API, icons by Data Dragon</small>
+    <small>Powered by Riot Games API, icons by Data Dragon. Made by @renas2g</small>
   </footer>
 
   <script type="module">
