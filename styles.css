@@ -104,4 +104,6 @@ button.ghost { background: transparent; border: 1px solid var(--border); color: 
 .item-icons { display: flex; gap: 6px; }
 .item-icons img { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--border); background:#0b1118; }
 
+.overlay[hidden] { display: none !important; }
+
 
