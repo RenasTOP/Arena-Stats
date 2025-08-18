@@ -1,9 +1,9 @@
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
 const ARENA_QUEUE = 1700;
-const MATCH_COUNT = 100; // pull more so progress per champion is meaningful
+const MATCH_COUNT = 80; // pull more so progress per champion is meaningful
 
 const CHUNK_SIZE = 10;        // 10–20 is safe
-const CHUNK_DELAY_MS = 400;   // pause between chunks to avoid 429s
+const CHUNK_DELAY_MS = 500;   // pause between chunks to avoid 429s
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
