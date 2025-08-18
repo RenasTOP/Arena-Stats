@@ -7,6 +7,18 @@ const CHUNK_DELAY_MS = 700;   // pause between chunks to avoid 429s
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+let CURRENT_PUUID = null;
+let CURRENT_PLAYER_TAG = "";
+let NEXT_START = 0;           // where the next /match-ids page should start
+const PAGE_MORE = 200;        // how many IDs to fetch per "Load next" click
+
+const actions = document.getElementById("actions");
+const btnMore  = document.getElementById("load-more");
+const btnAll   = document.getElementById("load-all");
+
+btnMore.addEventListener("click", () => loadMorePages(PAGE_MORE));
+btnAll.addEventListener("click", () => loadAllPages());
+
 async function fetchMatchesInChunks(ids, puuid) {
   let out = [];
   for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
@@ -14,12 +26,16 @@ async function fetchMatchesInChunks(ids, puuid) {
     status(`Fetching match details… ${Math.min(i + CHUNK_SIZE, ids.length)}/${ids.length}`);
     const part = await fetchJSON(`${API_BASE}/matches?ids=${slice.join(",")}&puuid=${puuid}`);
     out = out.concat(part);
+
+    // live update so users see progress
     LAST_MATCHES = out.slice().sort((a,b)=>b.gameStart - a.gameStart);
     renderMatches(LAST_MATCHES);
+
     if (i + CHUNK_SIZE < ids.length) await sleep(CHUNK_DELAY_MS);
   }
   return out;
 }
+
 
 async function fetchIdsPaged(puuid, total, queue = ARENA_QUEUE) {
   const all = [];
@@ -40,12 +56,120 @@ async function fetchIdsPaged(puuid, total, queue = ARENA_QUEUE) {
   return all;
 }
 
+// fetch a specific RANGE of ids starting at "startFrom", up to "totalNeeded"
+async function fetchIdsRange(puuid, startFrom, totalNeeded, queue = ARENA_QUEUE) {
+  const ids = [];
+  let start = startFrom;
+  while (ids.length < totalNeeded) {
+    const count = Math.min(100, totalNeeded - ids.length);
+    status(`Fetching match ids… ${start}–${start + count - 1}`);
+    const batch = await fetchJSON(
+      `${API_BASE}/match-ids?puuid=${puuid}&queue=${queue}&start=${start}&count=${count}`
+    );
+    if (!batch.length) break;
+    ids.push(...batch);
+    start += batch.length;
+    await sleep(300);
+    if (batch.length < count) break; // Riot returned fewer than requested: end
+  }
+  return { ids, nextStart: start };
+}
+
+function dedupeById(list) {
+  const seen = new Set();
+  const out = [];
+  for (const m of list) {
+    const id = m?.matchId;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(m);
+  }
+  return out;
+}
+
+function updateSummaryFromProgress() {
+  const uniqueChamps = Object.keys(PROGRESS).length;
+  const completed = Object.values(PROGRESS).filter(p => p.completed).length;
+  const remaining = uniqueChamps - completed;
+  const places = LAST_MATCHES.map(m => m.placement).filter(Number.isFinite);
+  const avgPlace = places.length ? (places.reduce((a,b)=>a+b,0)/places.length).toFixed(2) : "0.00";
+
+  summaryBox.innerHTML = [
+    tile(CURRENT_PLAYER_TAG, "Player"),
+    tile(`${completed} champions 1st`, "Completed"),
+    tile(`${remaining} still trying`, "In progress"),
+    tile(`${avgPlace} average place`, "Across matches"),
+  ].join("");
+}
+
 function cacheKey(puuid){ return `arena_cache:${puuid}`; }
 function loadCache(puuid){
   try { return JSON.parse(localStorage.getItem(cacheKey(puuid)) || "null"); } catch { return null; }
 }
 function saveCache(puuid, data){
   try { localStorage.setItem(cacheKey(puuid), JSON.stringify(data)); } catch {}
+}
+
+async function loadMorePages(amount) {
+  if (!CURRENT_PUUID) return;
+  const startFrom = NEXT_START || LAST_MATCHES.length || 0;
+
+  // get the next "amount" ids (paged internally in 100s)
+  const { ids, nextStart } = await fetchIdsRange(CURRENT_PUUID, startFrom, amount, ARENA_QUEUE);
+  if (!ids.length) { status("No more Arena matches found."); return; }
+
+  status(`Fetching match details… 0/${ids.length}`);
+  const newMatches = await fetchMatchesInChunks(ids, CURRENT_PUUID);
+
+  // merge, dedupe, sort
+  LAST_MATCHES = dedupeById(LAST_MATCHES.concat(newMatches)).sort((a,b)=>b.gameStart - a.gameStart);
+  PROGRESS = buildProgress(LAST_MATCHES);
+  updateSummaryFromProgress();
+  renderMatches(LAST_MATCHES);
+
+  NEXT_START = nextStart;
+
+  // persist
+  const cached = loadCache(CURRENT_PUUID) || {};
+  saveCache(CURRENT_PUUID, {
+    latestId: cached.latestId || (LAST_MATCHES[0]?.matchId ?? null),
+    matches: LAST_MATCHES,
+    updatedAt: Date.now(),
+    nextStart: NEXT_START,
+  });
+
+  status("");
+}
+
+async function loadAllPages() {
+  if (!CURRENT_PUUID) return;
+  status("Loading all past Arena matches… this may take a while.");
+  while (true) {
+    const prevStart = NEXT_START || LAST_MATCHES.length || 0;
+    const { ids, nextStart } = await fetchIdsRange(CURRENT_PUUID, prevStart, 500, ARENA_QUEUE);
+    if (!ids.length) { status("All past Arena matches loaded."); break; }
+
+    status(`Fetching match details… 0/${ids.length}`);
+    const newMatches = await fetchMatchesInChunks(ids, CURRENT_PUUID);
+
+    LAST_MATCHES = dedupeById(LAST_MATCHES.concat(newMatches)).sort((a,b)=>b.gameStart - a.gameStart);
+    PROGRESS = buildProgress(LAST_MATCHES);
+    updateSummaryFromProgress();
+    renderMatches(LAST_MATCHES);
+
+    NEXT_START = nextStart;
+
+    const cached = loadCache(CURRENT_PUUID) || {};
+    saveCache(CURRENT_PUUID, {
+      latestId: cached.latestId || (LAST_MATCHES[0]?.matchId ?? null),
+      matches: LAST_MATCHES,
+      updatedAt: Date.now(),
+      nextStart: NEXT_START,
+    });
+
+    // be gentle to Riot
+    await sleep(1000);
+  }
 }
 
 
@@ -154,32 +278,25 @@ form.addEventListener("submit", async (e) => {
     const acc = await fetchJSON(
       `${API_BASE}/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`
     );
+    CURRENT_PUUID = acc.puuid;
+    CURRENT_PLAYER_TAG = `${acc.gameName}#${acc.tagLine}`;
 
     // 2) try to render cached matches instantly (if we have them)
     const cached = loadCache(acc.puuid);
     if (cached?.matches?.length) {
       LAST_MATCHES = cached.matches;
       PROGRESS = buildProgress(LAST_MATCHES);
-
-      const uniqueChamps = Object.keys(PROGRESS).length;
-      const completed = Object.values(PROGRESS).filter(p => p.completed).length;
-      const remaining = uniqueChamps - completed;
-      const places = LAST_MATCHES.map(m => m.placement).filter(Number.isFinite);
-      const avgPlace = places.length ? (places.reduce((a,b)=>a+b,0)/places.length).toFixed(2) : "0.00";
-
-      summaryBox.innerHTML = [
-        tile(`${acc.gameName}#${acc.tagLine}`, "Player"),
-        tile(`${completed} champions 1st`, "Completed"),
-        tile(`${remaining} still trying`, "In progress"),
-        tile(`${avgPlace} average place`, "Across matches"),
-      ].join("");
-
+      NEXT_START = cached.nextStart ?? cached.matches.length ?? 0;  // where to continue
+      updateSummaryFromProgress();
       renderMatches(LAST_MATCHES);
       filters.hidden = false;
+      actions.hidden = false;
       status("Refreshing…");
+    } else {
+      NEXT_START = 0;
     }
 
-    // 3) fetch newest IDs (paged)
+    // 3) fetch newest IDs (paged from 0 up to MATCH_COUNT)
     status("Fetching match ids…");
     const ids = await fetchIdsPaged(acc.puuid, MATCH_COUNT, ARENA_QUEUE);
     if (!ids.length) { status("No Arena matches found for this player."); return; }
@@ -193,7 +310,7 @@ form.addEventListener("submit", async (e) => {
       merged = cached.matches.slice();              // keep cached as base
     }
 
-    // 5) fetch details only for new IDs (live rendering already happens in fetchMatchesInChunks)
+    // 5) fetch details only for new IDs (if any)
     let newlyFetched = [];
     if (newIds.length) {
       status(`Fetching match details… 0/${newIds.length}`);
@@ -201,59 +318,33 @@ form.addEventListener("submit", async (e) => {
       newlyFetched.sort((a,b)=>b.gameStart - a.gameStart);
     }
 
-    // 6) compute final list (new + old), else first-time pull everything
+    // 6) compute final list (new + old) or first-time pull everything
     if (cached?.matches?.length) {
-      LAST_MATCHES = (newlyFetched.length ? newlyFetched.concat(merged) : merged).slice(0, MATCH_COUNT);
+      LAST_MATCHES = dedupeById((newlyFetched.length ? newlyFetched.concat(merged) : merged));
+      LAST_MATCHES.sort((a,b)=>b.gameStart - a.gameStart);
+      // keep NEXT_START from cache (where to continue for Load more)
     } else {
       const full = newlyFetched.length ? newlyFetched : await fetchMatchesInChunks(ids, acc.puuid);
-      LAST_MATCHES = full.slice(0, MATCH_COUNT).sort((a,b)=>b.gameStart - a.gameStart);
+      LAST_MATCHES = dedupeById(full).sort((a,b)=>b.gameStart - a.gameStart);
+      NEXT_START = LAST_MATCHES.length; // continue from here
     }
 
     // 7) recompute summary + progress
     PROGRESS = buildProgress(LAST_MATCHES);
-    const uniqueChamps = Object.keys(PROGRESS).length;
-    const completed = Object.values(PROGRESS).filter(p => p.completed).length;
-    const remaining = uniqueChamps - completed;
-    const places = LAST_MATCHES.map(m => m.placement).filter(Number.isFinite);
-    const avgPlace = places.length ? (places.reduce((a,b)=>a+b,0)/places.length).toFixed(2) : "0.00";
+    updateSummaryFromProgress();
 
-    summaryBox.innerHTML = [
-      tile(`${acc.gameName}#${acc.tagLine}`, "Player"),
-      tile(`${completed} champions 1st`, "Completed"),
-      tile(`${remaining} still trying`, "In progress"),
-      tile(`${avgPlace} average place`, "Across matches"),
-    ].join("");
-
-    // 8) progress panes
-    progressWrap.hidden = false;
-    progComplete.innerHTML = renderComplete(PROGRESS);
-    progPending.innerHTML = renderPending(PROGRESS);
-
-    // 9) hardest top 10
-    const hardest = Object.values(PROGRESS)
-      .filter(p => p.completed)
-      .sort((a,b)=>b.attemptsUntilFirst - a.attemptsUntilFirst)
-      .slice(0,10);
-    hardestBox.hidden = false;
-    hardestBox.innerHTML = `
-      <div class="section-title"><strong>Top 10 hardest to get 1st</strong><span class="small">by attempts</span></div>
-      <div class="list">
-        ${hardest.map(p => `
-          <span class="tag"><img src="${champIcon(p.name)}" alt="${p.name}">${p.name} · ${p.attemptsUntilFirst}</span>
-        `).join("")}
-      </div>
-    `;
-
-    // 10) show matches (you already live-render per chunk; this ensures final order)
-    renderMatches(LAST_MATCHES);
+    // 8) show UI
     filters.hidden = false;
+    actions.hidden = false;
+    renderMatches(LAST_MATCHES);
     status("");
 
-    // 11) save cache for next time
+    // 9) save cache for next time
     saveCache(acc.puuid, {
       latestId: ids[0] || cached?.latestId || null, // newest ID we saw at the top
       matches: LAST_MATCHES,
       updatedAt: Date.now(),
+      nextStart: NEXT_START,
     });
 
   } catch (err) {
