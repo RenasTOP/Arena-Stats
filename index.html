@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Arena Stats</title>
-  <link rel="stylesheet" href="styles.css?v=6" />
+  <link rel="stylesheet" href="styles.css?v=7" />
 </head>
 <body>
   <main class="container">
@@ -12,8 +12,9 @@
       <h1>Arena Stats Lookup</h1>
       <nav class="filters" id="filters" hidden>
         <button data-filter="all" class="active">All</button>
-        <button data-filter="wins">Wins</button>
-        <button data-filter="losses">Losses</button>
+        <button data-filter="top3">Top 3</button>
+        <button data-filter="firsts">1st only</button>
+        <button data-filter="inprogress">Still trying</button>
       </nav>
     </header>
 
@@ -26,10 +27,12 @@
 
     <section id="summary" class="card summary"></section>
 
-    <section id="tops" class="top-row" hidden>
-      <div class="card" id="top-champs"></div>
-      <div class="card" id="recent-record"></div>
+    <section id="progress" class="grid-2" hidden>
+      <div class="card" id="progress-complete"></div>
+      <div class="card" id="progress-pending"></div>
     </section>
+
+    <section id="hardest" class="card" hidden></section>
 
     <section id="matches" class="grid"></section>
   </main>
@@ -38,6 +41,6 @@
     <small>Powered by Riot Games API, icons by Data Dragon</small>
   </footer>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>
