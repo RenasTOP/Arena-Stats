@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Arena Stats</title>
-  <link rel="stylesheet" href="styles.css?v=8" />
+  <link id="css" rel="stylesheet" href="styles.css">
 </head>
 <body>
   <main class="container">
@@ -41,6 +41,11 @@
     <small>Powered by Riot Games API, icons by Data Dragon</small>
   </footer>
 
-  <script src="app.js?v=9"></script>
+  <script type="module">
+  // bump version automatically — change to Date.now() if you want *always fresh* in dev
+  const ver = new Date(document.lastModified).getTime();
+  document.getElementById('css').href = `styles.css?v=${ver}`;
+  import(`./app.js?v=${ver}`);
+</script>
 </body>
 </html>
