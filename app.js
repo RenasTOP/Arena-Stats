@@ -109,6 +109,10 @@ async function fetchMatchesInChunks(ids, puuid) {
     status(`Fetching match details… ${Math.min(i + CHUNK_SIZE, ids.length)}/${ids.length}`);
     const part = await fetchJSON(`${API_BASE}/matches?ids=${slice.join(",")}&puuid=${puuid}`);
     out = out.concat(part);
+// live preview = current matches + newly fetched so far (dedup + sort)
+   const preview = dedupeById(LAST_MATCHES.concat(out))
+     .sort((a,b)=>b.gameStart - a.gameStart);
+   renderMatches(preview);
 
     // live update
     LAST_MATCHES = out.slice().sort((a,b)=>b.gameStart - a.gameStart);
