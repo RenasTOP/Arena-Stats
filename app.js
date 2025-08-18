@@ -1,12 +1,24 @@
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
+const ARENA_QUEUE = 1700;
+const MATCH_COUNT = 100; // pull more so progress per champion is meaningful
 
 // Data Dragon version and icon helper
 let DD_VERSION = "15.16.1";
 const NAME_FIX = {
   FiddleSticks: "Fiddlesticks",
   Wukong: "MonkeyKing",
-  Renata: "Renata",
+  KhaZix: "Khazix",
+  VelKoz: "Velkoz",
+  ChoGath: "Chogath",
+  KaiSa: "Kaisa",
+  LeBlanc: "Leblanc",
+  DrMundo: "DrMundo",
   Nunu: "Nunu",
+  Renata: "Renata",
+  RekSai: "RekSai",
+  KogMaw: "KogMaw",
+  BelVeth: "Belveth",
+  TahmKench: "TahmKench",
 };
 async function initDDragon() {
   try {
@@ -18,8 +30,15 @@ async function initDDragon() {
   } catch {}
 }
 function champIcon(name) {
-  const key = NAME_FIX[name] || name;
-  return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(key)}.png`;
+  const fixed = NAME_FIX[name] || name;
+  return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`;
+}
+function ordinal(n){
+  if (n === 1) return "1st";
+  if (n === 2) return "2nd";
+  if (n === 3) return "3rd";
+  if (!Number.isFinite(n)) return "—";
+  return `${n}th`;
 }
 
 const form = document.getElementById("search-form");
@@ -28,25 +47,29 @@ const statusBox = document.getElementById("status");
 const summaryBox = document.getElementById("summary");
 const matchesBox = document.getElementById("matches");
 const filters = document.getElementById("filters");
-const topRow = document.getElementById("tops");
-const topChamps = document.getElementById("top-champs");
-const recentRecord = document.getElementById("recent-record");
-
-const ARENA_QUEUE = 1700;
+const progressWrap = document.getElementById("progress");
+const progComplete = document.getElementById("progress-complete");
+const progPending = document.getElementById("progress-pending");
+const hardestBox = document.getElementById("hardest");
 
 let LAST_MATCHES = [];
+let PROGRESS = null; // per champion progress
 
 filters.addEventListener("click", (e) => {
   if (e.target.tagName !== "BUTTON") return;
   [...filters.querySelectorAll("button")].forEach(b => b.classList.remove("active"));
   e.target.classList.add("active");
-  const f = e.target.dataset.filter;
-  renderMatches(filterMatches(f));
+  const mode = e.target.dataset.filter;
+  renderMatches(filterMatches(mode));
 });
 
 function filterMatches(mode) {
-  if (mode === "wins") return LAST_MATCHES.filter(m => m.win === true);
-  if (mode === "losses") return LAST_MATCHES.filter(m => m.win === false);
+  if (mode === "top3") return LAST_MATCHES.filter(m => Number(m.placement) && m.placement <= 3);
+  if (mode === "firsts") return LAST_MATCHES.filter(m => m.placement === 1);
+  if (mode === "inprogress") {
+    const setTrying = new Set(Object.values(PROGRESS).filter(p => !p.completed).map(p => p.name));
+    return LAST_MATCHES.filter(m => setTrying.has(m.championName));
+  }
   return LAST_MATCHES;
 }
 
@@ -61,66 +84,59 @@ form.addEventListener("submit", async (e) => {
   await initDDragon();
 
   try {
-    // 1) account
     const acc = await fetchJSON(`${API_BASE}/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`);
 
     status("Fetching match ids...");
-    // 2) ids
-    const ids = await fetchJSON(`${API_BASE}/match-ids?puuid=${acc.puuid}&queue=${ARENA_QUEUE}&count=20`);
+    const ids = await fetchJSON(`${API_BASE}/match-ids?puuid=${acc.puuid}&queue=${ARENA_QUEUE}&count=${MATCH_COUNT}`);
 
     status("Fetching match details...");
-    // 3) details
     const all = await fetchJSON(`${API_BASE}/matches?ids=${ids.join(",")}&puuid=${acc.puuid}`);
-    LAST_MATCHES = all;
+    LAST_MATCHES = all.sort((a,b)=>b.gameStart - a.gameStart);
 
-    // Aggregates
-    const total = all.length;
-    const wins = all.filter(x => x.win === true).length;
-    const losses = all.filter(x => x.win === false).length;
-    const wr = total ? ((wins / total) * 100).toFixed(1) : "0.0";
-    const places = all.map(m => m.placement).filter(Number.isFinite);
-    const firsts = places.filter(p => p === 1).length;
-    const avgPlace = places.length ? (places.reduce((a,b)=>a+b,0)/places.length).toFixed(2) : "0.00";
-    const champs = countBy(all.map(m => m.championName));
+    // Build progress per champion
+    PROGRESS = buildProgress(LAST_MATCHES);
 
     // Summary tiles
+    const total = LAST_MATCHES.length;
+    const uniqueChamps = Object.keys(PROGRESS).length;
+    const completed = Object.values(PROGRESS).filter(p => p.completed).length;
+    const remaining = uniqueChamps - completed;
+    const firsts = completed;
+    const places = LAST_MATCHES.map(m => m.placement).filter(Number.isFinite);
+    const avgPlace = places.length ? (places.reduce((a,b)=>a+b,0)/places.length).toFixed(2) : "0.00";
+
     summaryBox.innerHTML = [
       tile(`${acc.gameName}#${acc.tagLine}`, "Player"),
-      tile(`${wins}W, ${losses}L`, "Record"),
-      tile(`${wr}%`, "Win rate"),
-      tile(`${firsts} firsts, ${avgPlace} avg place`, "Arena"),
+      tile(`${firsts} champions 1st`, "Completed"),
+      tile(`${remaining} still trying`, "In progress"),
+      tile(`${avgPlace} average place`, "Across matches"),
     ].join("");
 
-    // Top row, top champs and recent record
-    topRow.hidden = false;
-    const top = Object.entries(champs).sort((a,b)=>b[1]-a[1]).slice(0,6);
-    topChamps.innerHTML = `
-      <div class="row" style="justify-content:space-between">
-        <strong>Most played</strong><span class="small">${Object.keys(champs).length} unique</span>
-      </div>
-      <div class="chips">
-        ${top.map(([name,c]) => `
-          <span class="chip"><img src="${champIcon(name)}" alt="${name}" />${name} · ${c}</span>
+    // Progress panes
+    progressWrap.hidden = false;
+    progComplete.innerHTML = renderComplete(PROGRESS);
+    progPending.innerHTML = renderPending(PROGRESS);
+
+    // Hardest top 10
+    const hardest = Object.values(PROGRESS)
+      .filter(p => p.completed)
+      .sort((a,b)=>b.attemptsUntilFirst - a.attemptsUntilFirst)
+      .slice(0,10);
+    hardestBox.hidden = false;
+    hardestBox.innerHTML = `
+      <div class="section-title"><strong>Top 10 hardest to get 1st</strong><span class="small">by attempts</span></div>
+      <div class="list">
+        ${hardest.map(p => `
+          <span class="tag"><img src="${champIcon(p.name)}" alt="${p.name}">${p.name} · ${p.attemptsUntilFirst}</span>
         `).join("")}
       </div>
-    `;
-    const last5 = all.slice(0,5);
-    const rWins = last5.filter(m=>m.win).length;
-    recentRecord.innerHTML = `
-      <div class="row" style="justify-content:space-between">
-        <strong>Recent form</strong><span class="small">last 5</span>
-      </div>
-      <div class="chips">
-        ${last5.map(m=>`<span class="chip ${m.win?'win':'loss'}">${m.win?'W':'L'}</span>`).join("")}
-      </div>
-      <div class="small">${rWins}W, ${5-rWins}L</div>
     `;
 
     // Filters visible
     filters.hidden = false;
 
-    // Cards
-    renderMatches(all);
+    // Match cards with placement badge
+    renderMatches(LAST_MATCHES);
 
     status("");
   } catch (err) {
@@ -129,21 +145,69 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
+function buildProgress(matches){
+  // group by champ, sort by time ascending to find first 1st
+  const byChamp = {};
+  for (const m of matches){
+    if (!byChamp[m.championName]) byChamp[m.championName] = [];
+    byChamp[m.championName].push(m);
+  }
+  const out = {};
+  for (const [name, list] of Object.entries(byChamp)){
+    const asc = list.slice().sort((a,b)=>a.gameStart - b.gameStart);
+    const firstIndex = asc.findIndex(x => x.placement === 1);
+    const completed = firstIndex !== -1;
+    const attemptsUntilFirst = completed ? firstIndex + 1 : asc.length;
+    const when = completed ? asc[firstIndex].gameStart : null;
+    out[name] = { name, completed, attemptsUntilFirst, attemptsSoFar: asc.length, when };
+  }
+  return out;
+}
+
+function renderComplete(progress){
+  const done = Object.values(progress).filter(p => p.completed).sort((a,b)=>a.when - b.when);
+  return `
+    <div class="section-title">
+      <strong>Champions completed</strong>
+      <span class="small">${done.length}</span>
+    </div>
+    <div class="list">
+      ${done.map(p => `
+        <span class="tag"><img src="${champIcon(p.name)}" alt="${p.name}">${p.name} · ${p.attemptsUntilFirst} tries</span>
+      `).join("")}
+    </div>
+  `;
+}
+function renderPending(progress){
+  const todo = Object.values(progress).filter(p => !p.completed).sort((a,b)=>b.attemptsSoFar - a.attemptsSoFar);
+  return `
+    <div class="section-title">
+      <strong>Still trying</strong>
+      <span class="small">${todo.length}</span>
+    </div>
+    <div class="list">
+      ${todo.map(p => `
+        <span class="tag"><img src="${champIcon(p.name)}" alt="${p.name}">${p.name} · ${p.attemptsSoFar} tries</span>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderMatches(list) {
   matchesBox.innerHTML = list.map(m => {
-    const badge = m.win === true ? "badge win" : m.win === false ? "badge loss" : "badge";
+    const place = Number(m.placement);
+    const cls = place === 1 ? "p1" : place === 2 ? "p2" : place === 3 ? "p3" : "px";
     const when = timeAgo(m.gameStart);
     const kda = `${m.kills}/${m.deaths}/${m.assists}`;
     return `
       <article class="item">
-        <div class="icon"><img src="${champIcon(m.championName)}" alt="${m.championName}" /></div>
+        <div class="icon"><img src="${champIcon(m.championName)}" alt="${m.championName}"></div>
         <div>
           <div class="head">
             <strong>${m.championName}</strong>
-            <span class="${badge}">${m.win === true ? "Win" : m.win === false ? "Loss" : "—"}</span>
+            <span class="badge ${cls} place">${ordinal(place)}</span>
           </div>
           <div class="small">KDA, ${kda}</div>
-          <div class="small">Placement, ${m.placement ?? "—"}</div>
           <div class="small">Played, ${when}</div>
         </div>
       </article>
@@ -151,21 +215,15 @@ function renderMatches(list) {
   }).join("");
 }
 
-function tile(big, label) {
-  return `<div class="tile"><div class="big">${big}</div><div class="label">${label}</div></div>`;
-}
-
+function tile(big, label) { return `<div class="tile"><div class="big kpi">${big}</div><div class="label">${label}</div></div>`; }
 function status(t) { statusBox.textContent = t; }
 function resetUI() {
   summaryBox.innerHTML = "";
   matchesBox.innerHTML = "";
-  topRow.hidden = true;
   filters.hidden = true;
+  progressWrap.hidden = true;
+  hardestBox.hidden = true;
   status("");
-}
-
-function countBy(arr) {
-  return arr.reduce((acc, x) => (acc[x] = (acc[x] || 0) + 1, acc), {});
 }
 
 function timeAgo(ts) {
@@ -182,7 +240,6 @@ function timeAgo(ts) {
 async function fetchJSON(url) {
   const r = await fetch(url);
   if (!r.ok) {
-    // try to read server error text
     let msg = `Request failed, ${r.status}`;
     try { msg += `, ${await r.text()}`; } catch {}
     throw new Error(msg);
