@@ -1,4 +1,4 @@
-const API_BASE = "https://your-worker.your-subdomain.workers.dev"; // change to your backend URL
+const API_BASE = "arena-proxy.irenasthat.workers.dev"; // change to your backend URL
 
 const form = document.getElementById("search-form");
 const riotIdInput = document.getElementById("riotid");
