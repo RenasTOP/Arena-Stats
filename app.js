@@ -22,18 +22,19 @@ async function fetchMatchesInChunks(ids, puuid) {
 async function fetchIdsPaged(puuid, total, queue = ARENA_QUEUE) {
   const all = [];
   let start = 0;
-  const PER = 100;               // Riot limit per call
+  const PER = 100;
   while (all.length < total) {
     const count = Math.min(PER, total - all.length);
+    status(`Fetching match ids… ${all.length}/${total}`);
     const batch = await fetchJSON(
       `${API_BASE}/match-ids?puuid=${puuid}&queue=${queue}&start=${start}&count=${count}`
     );
     if (!batch.length) break;
     all.push(...batch);
     start += batch.length;
-    // small pause to be nice to Riot
     await sleep(300);
   }
+  status(`Fetched match ids: ${all.length}`);
   return all;
 }
 
