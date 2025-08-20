@@ -3,95 +3,123 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Arena Progress Tracker</title>
-  <meta name="theme-color" content="#0f1216">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link id="css" rel="stylesheet" href="styles.css">
+  <title>Arena.gg</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="container">
-    <header class="header">
-      <h1>Arena Progress Tracker</h1>
-
-      <div class="toolbar">
-        <nav class="filters" id="filters" hidden>
-          <button data-filter="all" class="active">All</button>
-          <button data-filter="top3">Top 3</button>
-          <button data-filter="firsts">1st place</button>
-          <button data-filter="inprogress">Left for Arena God</button>
-        </nav>
-
-        <div class="right-tools">
-          <button id="btn-update" title="Force refresh like opgg">Update</button>
-          <div id="last-updated" class="muted small" aria-live="polite"></div>
-        </div>
-      </div>
-    </header>
-
-    <form id="search-form" class="search">
-      <input id="riotid" placeholder="Riot ID, e.g., Renas#CHEGA" required />
-      <button type="submit">Search</button>
-    </form>
-
-    <section id="status"></section>
-
-    <!-- KPIs -->
-    <section id="summary" class="card summary"></section>
-
-    <!-- Visuals -->
-    <section id="viz" class="grid-2" hidden>
-      <div class="card" id="placement-card">
-        <div class="section-title">
-          <strong>Placements</strong><span class="small">1 to 8</span>
-        </div>
-        <div id="placement-chart" class="bars"></div>
-      </div>
-
-      <div class="card" id="rolling-card">
-        <div class="section-title">
-          <strong>Rolling average place</strong><span class="small">Last 10 games</span>
-        </div>
-        <canvas id="rolling-canvas" width="600" height="220"></canvas>
-      </div>
-
-      <div class="card" id="first-card">
-        <div class="section-title">
-          <strong>First-place champions</strong><span class="small"><span id="first-count">0</span> / 60</span>
-        </div>
-        <div id="first-champs" class="champ-grid"></div>
-      </div>
-
-      <div id="hardest" class="card" hidden></div>
-    </section>
-
-    <!-- Matches -->
-    <section id="matches" class="grid" aria-live="polite"></section>
-
-    <!-- Modal -->
-    <div id="overlay" class="overlay" hidden>
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-        <button class="close" id="close-modal" aria-label="Close">×</button>
-        <div id="modal-body" class="modal-body"></div>
-      </div>
+  <header class="topbar">
+    <div class="container">
+      <h1 class="brand">Arena.gg</h1>
+      <nav class="tabs" id="tabs">
+        <button data-tab="overview" class="active">Overview</button>
+        <button data-tab="history">History</button>
+        <button data-tab="synergy">Duo Synergies</button>
+        <button data-tab="tierlist">Tier List</button>
+      </nav>
+      <form id="search-form" class="search">
+        <input id="riotid" placeholder="Riot ID (Name#TAG)" />
+        <button type="submit">Search</button>
+        <button type="button" id="btn-update" class="ghost">Update</button>
+      </form>
     </div>
+  </header>
+
+  <main class="container layout">
+    <!-- Left sidebar -->
+    <aside class="sidebar">
+      <section class="card">
+        <h3>Wins checklist</h3>
+        <small class="muted">✓ = 1st place achieved</small>
+        <div id="wins-checklist" class="checklist"></div>
+      </section>
+
+      <section class="card">
+        <h3>Hardest 1sts</h3>
+        <div id="hardest-list" class="tags"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <h3>Placements</h3><small class="muted">last N games</small>
+        </div>
+        <canvas id="placements-canvas" width="320" height="220"></canvas>
+      </section>
+
+      <div class="muted small" id="last-updated"></div>
+    </aside>
+
+    <!-- Right content -->
+    <section class="content">
+      <!-- OVERVIEW -->
+      <div id="tab-overview" class="tab active">
+        <section class="kpis card" id="kpis"></section>
+
+        <section class="card">
+          <h3>Recent performance</h3>
+          <canvas id="rolling-canvas" width="920" height="240"></canvas>
+        </section>
+      </div>
+
+      <!-- HISTORY -->
+      <div id="tab-history" class="tab">
+        <div class="filters">
+          <button data-filter="all" class="active">All</button>
+          <button data-filter="wins">1st place only</button>
+          <button data-filter="neverwon">Champions without a 1st</button>
+        </div>
+
+        <section id="matches" class="grid"></section>
+        <div id="more" class="more">
+          <button id="btn-more" class="ghost">Load 100 more</button>
+        </div>
+      </div>
+
+      <!-- SYNERGY -->
+      <div id="tab-synergy" class="tab">
+        <section class="card">
+          <h3>Duo synergies (your ally pair)</h3>
+          <table class="table" id="synergy-table">
+            <thead>
+              <tr>
+                <th>Ally champion</th>
+                <th>Games</th>
+                <th>Wins</th>
+                <th>Win %</th>
+                <th>Avg place</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+      </div>
+
+      <!-- TIER LIST -->
+      <div id="tab-tierlist" class="tab">
+        <section class="card">
+          <div class="tierbar">
+            <div class="left">
+              <button id="tier-edit" class="ghost">Edit</button>
+              <button id="tier-save" class="ghost">Save</button>
+              <button id="tier-reset" class="ghost red">Reset</button>
+            </div>
+            <div class="right">
+              <button id="tier-export" class="ghost">Export</button>
+              <button id="tier-import" class="ghost">Import</button>
+            </div>
+          </div>
+
+          <div id="tier-board" class="tierboard">
+            <!-- built in JS: S/A/B/C/D rows -->
+          </div>
+        </section>
+      </div>
+    </section>
   </main>
 
   <footer class="footer">
-    <small class="muted">Powered by Riot Games API, icons by Data Dragon. Made by @renas2g</small>
+    <div class="container muted">Powered by Riot Games API, icons by Data Dragon. Made by @renas2g</div>
   </footer>
 
-  <script>
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js").catch(()=>{});
-      });
-    }
-  </script>
-
-  <script type="module">
-    const ver = new Date(document.lastModified).getTime();
-    document.getElementById('css').href = `styles.css?v=${ver}`;
-    import(`./app.js?v=${ver}`);
-  </script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
