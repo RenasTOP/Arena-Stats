@@ -4,22 +4,37 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Arena Progress Tracker</title>
+  <meta name="theme-color" content="#0f1216">
+  <link rel="manifest" href="manifest.webmanifest">
   <link id="css" rel="stylesheet" href="styles.css">
 </head>
 <body>
   <main class="container">
     <header class="header">
       <h1>Arena Progress Tracker</h1>
-      <nav class="filters" id="filters" hidden>
-        <button data-filter="all" class="active">All</button>
-        <button data-filter="top3">Top 3</button>
-        <button data-filter="firsts">1st place</button>
-        <button data-filter="inprogress">Left for Arena God</button>
-      </nav>
+
+      <div class="toolbar">
+        <nav class="filters" id="filters" hidden>
+          <button data-filter="all" class="active">All</button>
+          <button data-filter="top3">Top 3</button>
+          <button data-filter="firsts">1st place</button>
+          <button data-filter="inprogress">Left for Arena God</button>
+        </nav>
+
+        <div class="range">
+          <label for="range-select">Range</label>
+          <select id="range-select">
+            <option value="all">All time</option>
+            <option value="7d">Last 7d</option>
+            <option value="30d">Last 30d</option>
+            <option value="90d">Last 90d</option>
+          </select>
+        </div>
+      </div>
     </header>
 
     <form id="search-form" class="search">
-      <input id="riotid" placeholder="Riot ID (e.g., Renas#CHEGA)" required />
+      <input id="riotid" placeholder="Riot ID, e.g., Renas#CHEGA" required />
       <button type="submit">Search</button>
     </form>
 
@@ -28,19 +43,29 @@
     <!-- KPIs -->
     <section id="summary" class="card summary"></section>
 
-    <!-- Paging actions -->
+    <!-- Actions -->
     <section id="actions" class="actions" hidden>
       <button id="load-more">Load next 200</button>
-      <button id="load-all" class="ghost">Load all (slow)</button>
+      <button id="load-all" class="ghost">Load all, slow</button>
+      <button id="export-csv" class="ghost">Export CSV</button>
+      <button id="copy-link" class="ghost">Copy link</button>
+      <button id="clear-cache" class="ghost red">Clear cache</button>
     </section>
 
     <!-- Visuals -->
     <section id="viz" class="grid-2" hidden>
       <div class="card" id="placement-card">
         <div class="section-title">
-          <strong>Placements</strong><span class="small">1→8</span>
+          <strong>Placements</strong><span class="small">1 to 8</span>
         </div>
         <div id="placement-chart" class="bars"></div>
+      </div>
+
+      <div class="card" id="rolling-card">
+        <div class="section-title">
+          <strong>Rolling average place</strong><span class="small">Last 10 games</span>
+        </div>
+        <canvas id="rolling-canvas" width="600" height="220"></canvas>
       </div>
 
       <div class="card" id="first-card">
@@ -49,16 +74,16 @@
         </div>
         <div id="first-champs" class="champ-grid"></div>
       </div>
+
+      <div id="hardest" class="card" hidden></div>
     </section>
 
-    <section id="hardest" class="card" hidden></section>
-
     <!-- Matches -->
-    <section id="matches" class="grid"></section>
+    <section id="matches" class="grid" aria-live="polite"></section>
 
-    <!-- Match details modal -->
+    <!-- Modal -->
     <div id="overlay" class="overlay" hidden>
-      <div class="modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <button class="close" id="close-modal" aria-label="Close">×</button>
         <div id="modal-body" class="modal-body"></div>
       </div>
@@ -69,8 +94,17 @@
     <small>Powered by Riot Games API, icons by Data Dragon. Made by @renas2g</small>
   </footer>
 
+  <script>
+    // service worker
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(()=>{});
+      });
+    }
+  </script>
+
   <script type="module">
-    // bump cache-busting automatically
+    // simple cache buster for dev
     const ver = new Date(document.lastModified).getTime();
     document.getElementById('css').href = `styles.css?v=${ver}`;
     import(`./app.js?v=${ver}`);
