@@ -1,6 +1,6 @@
 // Arena.gg frontend (tabs + search + lazy paging + sidebar stats + synergy + tierlist)
 // Change this to your Worker URL:
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev/"; // <<< EDIT ME
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // <<< EDIT ME
 const ARENA_QUEUE = 1700;
 
 const CHUNK_SIZE = 10;
