@@ -29,7 +29,6 @@ const btnMore = document.getElementById("btn-more");
 const winsChecklist = document.getElementById("wins-checklist");
 const hardestList = document.getElementById("hardest-list");
 const placementsCanvas = document.getElementById("placements-canvas");
-const rollingCanvas = document.getElementById("rolling-canvas");
 const lastUpdatedEl = document.getElementById("last-updated");
 const filters = document.querySelector("#tab-history .filters");
 const synergyTableBody = document.querySelector("#synergy-table tbody");
@@ -75,8 +74,7 @@ matchesBox.addEventListener("click", (e)=>{
   const card = e.target.closest(".item");
   if (!card) return;
   const id = card.dataset.id;
-  // build URL relative to current directory (works on GitHub Pages subfolder)
-  const base = new URL(location.href.replace(/[^/]*$/, ""));
+  const base = new URL(location.href.replace(/[^/]*$/, "")); // relative to current dir
   const url = new URL("match.html", base);
   url.searchParams.set("id", id);
   url.searchParams.set("puuid", CURRENT.puuid || "");
@@ -189,6 +187,7 @@ function dedupeById(list){ const seen=new Set(); const out=[]; for (const m of l
 
 // ---- Render ----
 function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); renderTierlistOnce(); }
+
 function renderKPIs(){
   const list = CURRENT.matches;
   const places = list.map(m=>Number(m.placement)).filter(Number.isFinite);
@@ -203,29 +202,37 @@ function renderKPIs(){
     tile(`${wins}`,"1st places"),
     tile(`${champs}`,"Champions played"),
   ].join("");
-  drawRolling(rollingCanvas, places);
 }
-function renderSidebar(){
-  const byChamp = groupBy(CURRENT.matches, m=>m.championName);
-  const rows = Object.keys(byChamp).sort((a,b)=>a.localeCompare(b)).map(name=>{
-    const got = byChamp[name].some(m=>m.placement===1);
-    return `<div class="check" title="${name}">
-      <img src="${champIcon(name)}" alt="${name}">
-      ${got ? `<div class="tick">✓</div>` : ""}
-    </div>`;
-  }).join("");
-  winsChecklist.innerHTML = rows || `<div class="muted small">Play some games to see this fill up.</div>`;
 
+function renderSidebar(){
+  // Wins checklist — ONLY champions you've won with
+  const byChamp = groupBy(CURRENT.matches, m=>m.championName);
+  const rows = Object.keys(byChamp)
+    .filter(name => byChamp[name].some(m=>m.placement===1))
+    .sort((a,b)=>a.localeCompare(b))
+    .map(name=>`
+      <div class="check" title="${name}">
+        <img src="${champIcon(name)}" alt="${name}">
+        <div class="tick">✓</div>
+      </div>`).join("");
+  winsChecklist.innerHTML = rows || `<div class="muted small">Get a 1st to start filling this up.</div>`;
+
+  // Most attempts for a win (formerly “Hardest 1sts”)
   const progress = buildProgress(CURRENT.matches);
-  const hardest = Object.values(progress).filter(p=>p.completed).sort((a,b)=>b.attemptsUntilFirst-a.attemptsUntilFirst).slice(0,5);
+  const hardest = Object.values(progress)
+    .filter(p=>p.completed)
+    .sort((a,b)=>b.attemptsUntilFirst-a.attemptsUntilFirst)
+    .slice(0,5);
   hardestList.innerHTML = hardest.length ? hardest.map(p=>
     `<span class="tag"><img src="${champIcon(p.name)}" width="16" height="16" style="border-radius:4px;border:1px solid var(--border)"> ${p.name} · ${p.attemptsUntilFirst}</span>`
-  ).join("") : `<div class="muted small">No 1sts yet.</div>`;
+  ).join("") : `<div class="muted small">No wins yet.</div>`;
 
+  // Placement chart (narrow)
   const counts = Array(8).fill(0);
   for (const m of CURRENT.matches){ const p=Number(m.placement); if (p>=1 && p<=8) counts[p-1]++; }
   drawPlacementBars(placementsCanvas, counts);
 }
+
 function renderHistory(forcedList){
   const listAll = (forcedList || CURRENT.matches).slice();
   let list = listAll;
@@ -251,6 +258,7 @@ function renderHistory(forcedList){
 
   btnMore.parentElement.style.display = "block";
 }
+
 function renderSynergy(){
   const agg = {};
   for (const m of CURRENT.matches){
@@ -309,16 +317,4 @@ function drawPlacementBars(canvas, counts){
     ctx.fillStyle="#cfd9df"; ctx.font="bold 14px system-ui"; ctx.fillText(String(counts[i]), x+bw/2-4, y-4);
     const lbl = `${i+1}${["st","nd","rd"][i]||"th"}`; ctx.fillText(lbl, x+bw/2-10, H-4);
   }
-}
-function drawRolling(canvas, placements){
-  const ctx=canvas.getContext("2d"); const W=canvas.width,H=canvas.height;
-  ctx.clearRect(0,0,W,H); if(!placements.length) return;
-  const roll=[]; const N=10;
-  for(let i=0;i<placements.length;i++){ const s=Math.max(0,i-N+1); const slice=placements.slice(s,i+1); roll.push(slice.reduce((a,b)=>a+b,0)/slice.length); }
-  const xmin=0,xmax=roll.length-1,ymin=1,ymax=8;
-  const x=i=>40+(W-60)*(i-xmin)/Math.max(1,xmax-xmin);
-  const y=v=>H-20-(H-40)*(v-ymin)/(ymax-ymin);
-  ctx.strokeStyle="#2a3340"; ctx.lineWidth=1;
-  for(let v=1;v<=8;v++){ ctx.beginPath(); ctx.moveTo(40,y(v)); ctx.lineTo(W-20,y(v)); ctx.stroke(); ctx.fillStyle="#7f8c8d"; ctx.font="12px system-ui"; ctx.fillText(String(v),10,y(v)+4); }
-  ctx.strokeStyle="#35a854"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x(0),y(roll[0])); for(let i=1;i<roll.length;i++) ctx.lineTo(x(i),y(roll[i])); ctx.stroke();
 }
