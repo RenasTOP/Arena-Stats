@@ -1,569 +1,533 @@
-/* Arena Progress Tracker, auto full history with single Update button
-   Author, Renas
-*/
-
-// Config
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
+// Arena.gg frontend (tabs + search + lazy paging + sidebar stats + synergy + tierlist)
+// Change this to your Worker URL:
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev/"; // <<< EDIT ME
 const ARENA_QUEUE = 1700;
+
 const CHUNK_SIZE = 10;
 const CHUNK_DELAY_MS = 700;
-const STALE_AFTER_MS = 6 * 60 * 60 * 1000; // 6h, for auto refresh like opgg
+const PAGE_SIZE = 100;
 
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+// ---- DOM ----
+const tabs = document.getElementById("tabs");
+const tabViews = {
+  overview: document.getElementById("tab-overview"),
+  history:  document.getElementById("tab-history"),
+  synergy:  document.getElementById("tab-synergy"),
+  tierlist: document.getElementById("tab-tierlist"),
+};
 
-// DOM
 const form = document.getElementById("search-form");
 const riotIdInput = document.getElementById("riotid");
-const statusBox = document.getElementById("status");
-const summaryBox = document.getElementById("summary");
-const matchesBox = document.getElementById("matches");
-const filters = document.getElementById("filters");
 const btnUpdate = document.getElementById("btn-update");
+
+const kpisBox = document.getElementById("kpis");
+const matchesBox = document.getElementById("matches");
+const btnMore = document.getElementById("btn-more");
+
+const winsChecklist = document.getElementById("wins-checklist");
+const hardestList = document.getElementById("hardest-list");
+const placementsCanvas = document.getElementById("placements-canvas");
+const rollingCanvas = document.getElementById("rolling-canvas");
 const lastUpdatedEl = document.getElementById("last-updated");
 
-// visuals
-const viz = document.getElementById("viz");
-const placementChart = document.getElementById("placement-chart");
-const firstChampsBox = document.getElementById("first-champs");
-const firstCountEl   = document.getElementById("first-count");
-const rollingCanvas  = document.getElementById("rolling-canvas");
+const filters = document.querySelector("#tab-history .filters");
 
-// modal
-const overlay   = document.getElementById("overlay");
-const modalBody = document.getElementById("modal-body");
-const closeBtn  = document.getElementById("close-modal");
-if (closeBtn) closeBtn.addEventListener("click", () => (overlay.hidden = true));
-if (overlay) overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.hidden = true; });
-window.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay && !overlay.hidden) overlay.hidden = true; });
+const synergyTableBody = document.querySelector("#synergy-table tbody");
 
-// state
-let LAST_MATCHES = [];
-let PROGRESS = null;
-let CURRENT_PUUID = null;
-let CURRENT_PLAYER_TAG = "";
+const statusBox = createStatus();
 
-// Actions
-btnUpdate?.addEventListener("click", () => refreshNow(true));
+// ---- State ----
+let DD_VERSION = "15.16.1";
+const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Khazix", VelKoz:"Velkoz", ChoGath:"Chogath", KaiSa:"Kaisa", LeBlanc:"Leblanc", DrMundo:"DrMundo", Nunu:"Nunu", Renata:"Renata", RekSai:"RekSai", KogMaw:"KogMaw", BelVeth:"Belveth", TahmKench:"TahmKench" };
 
-filters?.addEventListener("click", (e) => {
-  if (e.target.tagName !== "BUTTON") return;
-  [...filters.querySelectorAll("button")].forEach(b => b.classList.remove("active"));
-  e.target.classList.add("active");
-  renderAll();
+let CURRENT = {
+  gameName: "", tagLine: "",
+  puuid: null, region: null,
+  matches: [], // [{...}]
+  ids: [],     // all ids discovered
+  nextStart: 0,
+  filter: "all",
+  lastUpdated: null,
+};
+
+const cacheKey = (puuid)=>`arena_cache_v1:${puuid}`;
+
+// ---- Bootstrap ----
+tabs.addEventListener("click", (e)=>{
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  [...tabs.children].forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  const key = btn.dataset.tab;
+  for (const [k,el] of Object.entries(tabViews)) el.classList.toggle("active", k===key);
 });
 
-matchesBox.addEventListener("click", (e) => {
-  const card = e.target.closest("article.item");
+filters.addEventListener("click", (e)=>{
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  [...filters.children].forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  CURRENT.filter = btn.dataset.filter;
+  renderHistory();
+});
+
+btnMore.addEventListener("click", () => loadMore());
+
+form.addEventListener("submit", onSearch);
+btnUpdate.addEventListener("click", () => refresh(true));
+
+matchesBox.addEventListener("click", (e)=>{
+  const card = e.target.closest(".item");
   if (!card) return;
   const id = card.dataset.id;
-  if (id) openMatchModal(id);
+  const url = new URL("./match.html", location.href);
+  url.searchParams.set("id", id);
+  url.searchParams.set("puuid", CURRENT.puuid || "");
+  url.searchParams.set("region", CURRENT.region || "");
+  location.href = url.toString();
 });
 
-// Data Dragon
-let DD_VERSION = "15.16.1";
-const NAME_FIX = {
-  FiddleSticks: "Fiddlesticks", Wukong: "MonkeyKing", KhaZix: "Khazix",
-  VelKoz: "Velkoz", ChoGath: "Chogath", KaiSa: "Kaisa", LeBlanc: "Leblanc",
-  DrMundo: "DrMundo", Nunu: "Nunu", Renata: "Renata", RekSai: "RekSai",
-  KogMaw: "KogMaw", BelVeth: "Belveth", TahmKench: "TahmKench",
-};
-async function initDDragon() {
-  try {
-    const r = await fetch("https://ddragon.leagueoflegends.com/api/versions.json");
-    if (r.ok) {
-      const arr = await r.json();
-      if (Array.isArray(arr) && arr[0]) DD_VERSION = arr[0];
-    }
-  } catch {}
-}
-function champIcon(name) {
-  const fixed = NAME_FIX[name] || name;
-  return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`;
-}
-function itemIcon(id) { return !id || id === 0 ? "" : `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/item/${id}.png`; }
+// ---- Helpers ----
+function champIcon(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`; }
+function itemIcon(id){ return !id || id===0 ? "" : `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/item/${id}.png`; }
+
 function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "?"; return `${n}th`; }
+function timeAgo(ts){ if(!ts) return "unknown"; const s=Math.max(1,Math.floor((Date.now()-Number(ts))/1000)); const m=Math.floor(s/60); if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<48) return `${h}h ago`; const d=Math.floor(h/24); return `${d}d ago`; }
+function status(t){ statusBox.textContent = t||""; }
+function setLastUpdated(ts){ lastUpdatedEl.textContent = ts ? `Last updated, ${new Date(ts).toLocaleString()}` : ""; }
 
-// URL helpers
-function getParam(name) { return new URLSearchParams(location.search).get(name); }
-function setParam(name, v) {
-  const u = new URL(location.href);
-  if (v == null || v === "") u.searchParams.delete(name);
-  else u.searchParams.set(name, v);
-  history.replaceState({}, "", u.toString());
-}
-function prefillFromURL() {
-  const id = getParam("id");
-  if (id) {
-    riotIdInput.value = id;
-    setTimeout(()=>form.dispatchEvent(new Event("submit", {cancelable:true})), 0);
-  }
-}
-
-// Cache
-function cacheKey(puuid){ return `arena_cache:${puuid}`; }
-function loadCache(puuid){
-  try { return JSON.parse(localStorage.getItem(cacheKey(puuid)) || "null"); } catch { return null; }
-}
-function saveCache(puuid, data){
-  try { localStorage.setItem(cacheKey(puuid), JSON.stringify(data)); } catch {}
-}
-function setLastUpdated(ts) {
-  if (!ts) { lastUpdatedEl.textContent = ""; return; }
-  const d = new Date(ts);
-  lastUpdatedEl.textContent = `Last updated, ${d.toLocaleString()}`;
-}
-
-// Fetch with backoff
-async function fetchJSON(url, tries = 3, delay = 600) {
+async function fetchJSON(url, tries=3, delay=600){
   const r = await fetch(url);
   if (r.ok) return r.json();
-  const text = await r.text().catch(()=> "");
-  const is429 = r.status === 429 || /Riot 429/i.test(text);
-  if (is429 && tries > 0) {
-    await sleep(delay);
-    return fetchJSON(url, tries - 1, delay * 2);
-  }
-  throw new Error(`Request failed, ${r.status}${text ? `, ${text}` : ""}`);
+  const txt = await r.text().catch(()=> "");
+  const is429 = r.status===429 || /Riot 429/i.test(txt);
+  if (is429 && tries>0){ await sleep(delay); return fetchJSON(url, tries-1, delay*2); }
+  throw new Error(`Request failed, ${r.status}${txt?`, ${txt}`:""}`);
 }
 
-// Core helpers
-async function fetchAllIds(puuid, queue = ARENA_QUEUE) {
-  const ids = [];
-  let start = 0;
-  const PER = 100;
-  while (true) {
-    status(`Fetching match ids, ${start} to ${start + PER - 1}`);
-    const batch = await fetchJSON(`${API_BASE}/match-ids?puuid=${puuid}&queue=${queue}&start=${start}&count=${PER}`);
-    if (!Array.isArray(batch) || batch.length === 0) break;
-    ids.push(...batch);
-    start += batch.length;
-    await sleep(250);
-    if (batch.length < PER) break;
-  }
-  status(`Fetched ${ids.length} match ids`);
-  return ids;
+async function initDDragon(){
+  try { const r = await fetch("https://ddragon.leagueoflegends.com/api/versions.json"); if (r.ok){ const arr = await r.json(); if (arr?.[0]) DD_VERSION = arr[0]; } } catch {}
 }
 
-function dedupeById(list) {
-  const seen = new Set();
-  const out = [];
-  for (const m of list) {
-    const id = m?.matchId;
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    out.push(m);
+function loadCache(puuid){ try { return JSON.parse(localStorage.getItem(cacheKey(puuid))||"null"); } catch { return null; } }
+function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
+
+function createStatus(){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; document.body.prepend(el); return el; }
+
+// ---- Search / Refresh ----
+async function onSearch(e){
+  e.preventDefault();
+  const raw = riotIdInput.value.trim();
+  if (!raw.includes("#")) { alert("Use Name#TAG"); return; }
+  const [gameName, tagLine] = raw.split("#");
+  await initDDragon();
+
+  try{
+    status("Looking up account…");
+    const acc = await fetchJSON(`${API_BASE}/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`);
+    CURRENT.gameName = acc.gameName; CURRENT.tagLine = acc.tagLine; CURRENT.puuid = acc.puuid;
+
+    const cached = loadCache(acc.puuid);
+    if (cached?.matches?.length){
+      Object.assign(CURRENT, { matches: cached.matches, ids: cached.ids||[], nextStart: cached.nextStart||0, region: cached.region||null, lastUpdated: cached.updatedAt||null });
+      renderAll();
+      setLastUpdated(cached.updatedAt);
+      status("Refreshing…");
+    } else {
+      Object.assign(CURRENT, { matches: [], ids: [], nextStart: 0, region: null, lastUpdated: null });
+    }
+
+    // discover region then pull first 100
+    const reg = await fetchJSON(`${API_BASE}/region?puuid=${encodeURIComponent(CURRENT.puuid)}`);
+    CURRENT.region = reg.region;
+
+    await refresh(true); // full = fetch fresh ids then first page
+  } catch(err){
+    console.error(err); status(err.message || "Error");
   }
-  return out;
 }
 
-async function fetchMatchesInChunks(ids, puuid) {
+async function refresh(full){
+  if (!CURRENT.puuid) return;
+  try{
+    // fetch id page 0 (and optionally store all ids if full)
+    status("Fetching match ids…");
+    let ids0 = await fetchJSON(`${API_BASE}/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=0&count=${PAGE_SIZE}`);
+    if (full){
+      CURRENT.ids = ids0.slice();
+      CURRENT.nextStart = PAGE_SIZE;
+    }
+    // fetch details for ids we don't have yet
+    const known = new Set(CURRENT.matches.map(m=>m.matchId));
+    const toFetch = ids0.filter(id=>!known.has(id));
+    const newRows = await fetchMatchesInChunks(toFetch, CURRENT.puuid, CURRENT.region);
+
+    CURRENT.matches = dedupeById(newRows.concat(CURRENT.matches)).sort((a,b)=>b.gameStart-a.gameStart);
+
+    const payload = {
+      matches: CURRENT.matches,
+      ids: CURRENT.ids,
+      nextStart: CURRENT.nextStart,
+      region: CURRENT.region,
+      updatedAt: Date.now()
+    };
+    saveCache(CURRENT.puuid, payload);
+    setLastUpdated(payload.updatedAt);
+
+    renderAll();
+    status("");
+  } catch(err){
+    console.error(err); status(err.message || "Refresh failed");
+  }
+}
+
+async function loadMore(){
+  try{
+    status(`Loading ids ${CURRENT.nextStart}…`);
+    const ids = await fetchJSON(`${API_BASE}/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${CURRENT.nextStart}&count=${PAGE_SIZE}`);
+    if (!ids.length){ status("No more games."); return; }
+    CURRENT.nextStart += ids.length;
+    CURRENT.ids.push(...ids);
+
+    const known = new Set(CURRENT.matches.map(m=>m.matchId));
+    const toFetch = ids.filter(id=>!known.has(id));
+    const newRows = await fetchMatchesInChunks(toFetch, CURRENT.puuid, CURRENT.region);
+    CURRENT.matches = dedupeById(CURRENT.matches.concat(newRows)).sort((a,b)=>b.gameStart-a.gameStart);
+
+    saveCache(CURRENT.puuid, { matches: CURRENT.matches, ids: CURRENT.ids, nextStart: CURRENT.nextStart, region: CURRENT.region, updatedAt: Date.now() });
+
+    renderAll();
+    status("");
+  } catch(err){
+    console.error(err); status(err.message || "Load failed");
+  }
+}
+
+async function fetchMatchesInChunks(ids, puuid, region){
   let collected = [];
-  for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
-    const slice = ids.slice(i, i + CHUNK_SIZE);
-    status(`Fetching match details, ${Math.min(i + CHUNK_SIZE, ids.length)}/${ids.length}`);
-    const part = await fetchJSON(`${API_BASE}/matches?ids=${slice.join(",")}&puuid=${puuid}`);
+  for (let i=0;i<ids.length;i+=CHUNK_SIZE){
+    const slice = ids.slice(i, i+CHUNK_SIZE);
+    status(`Fetching match details ${Math.min(i+CHUNK_SIZE, ids.length)}/${ids.length}`);
+    const part = await fetchJSON(`${API_BASE}/matches?ids=${slice.join(",")}&puuid=${puuid}&region=${region}`);
     collected = collected.concat(part);
-
-    const preview = dedupeById(LAST_MATCHES.concat(collected)).sort((a,b)=>b.gameStart - a.gameStart);
-    renderMatches(preview);
-
+    // live update list
+    renderHistory(dedupeById(CURRENT.matches.concat(collected)).sort((a,b)=>b.gameStart-a.gameStart));
     if (i + CHUNK_SIZE < ids.length) await sleep(CHUNK_DELAY_MS);
   }
   return collected;
 }
 
-// Filters
-function activeFilter() {
-  const btn = filters.querySelector("button.active");
-  return btn ? btn.dataset.filter : "all";
-}
-function filterMatchesByMode(list, mode) {
-  if (mode === "top3") return list.filter(m => Number(m.placement) && m.placement <= 3);
-  if (mode === "firsts") return list.filter(m => m.placement === 1);
-  if (mode === "inprogress") {
-    const setTrying = new Set(Object.values(PROGRESS).filter(p => !p.completed).map(p => p.name));
-    return list.filter(m => setTrying.has(m.championName));
-  }
-  return list;
+function dedupeById(list){
+  const seen = new Set(); const out = [];
+  for (const m of list){ if (!m?.matchId || seen.has(m.matchId)) continue; seen.add(m.matchId); out.push(m); }
+  return out;
 }
 
-// Render pipeline
-function renderAll() {
-  const mode = activeFilter();
-  const list = filterMatchesByMode(LAST_MATCHES, mode);
-
-  const progressForRange = buildProgress(LAST_MATCHES);
-  renderSummary(LAST_MATCHES, progressForRange);
-  renderPlacementChartFromList(LAST_MATCHES);
-  renderRollingAverage(LAST_MATCHES);
-  renderFirstChamps(PROGRESS);
-  renderHardest(PROGRESS);
-  renderMatches(list);
-  viz.hidden = false;
+// ---- Render ----
+function renderAll(){
+  renderKPIs();
+  renderSidebar();
+  renderHistory();
+  renderSynergy();
+  renderTierlistOnce();
 }
 
-function renderSummary(list, progressForRange) {
+function renderKPIs(){
+  const list = CURRENT.matches;
+  const places = list.map(m=>Number(m.placement)).filter(Number.isFinite);
+  const avg = places.length ? (places.reduce((a,b)=>a+b,0)/places.length).toFixed(2) : "0.00";
+  const wins = list.filter(m=>m.placement===1).length;
   const total = list.length;
-  const places = list.map(m => Number(m.placement)).filter(x => Number.isFinite(x));
-  const avgPlace = places.length ? (places.reduce((a,b)=>a+b,0) / places.length).toFixed(2) : "0.00";
-  const completedLifetime = Object.values(PROGRESS).filter(p => p.completed).length;
-  const arenaGodNeeded = Math.max(0, 60 - completedLifetime);
-  summaryBox.innerHTML = [
-    tile(CURRENT_PLAYER_TAG, "Player"),
-    tile(`${total}`, "Total Arena games"),
-    tile(`${avgPlace}`, "Average place"),
-    tile(`${completedLifetime}/60`, `Arena God, ${arenaGodNeeded} left`),
+  const champs = new Set(list.map(m=>m.championName)).size;
+  kpisBox.innerHTML = [
+    tile(`${CURRENT.gameName ? `${CURRENT.gameName}#${CURRENT.tagLine}` : "—"}`,"Player"),
+    tile(`${total}`,"Games loaded"),
+    tile(`${avg}`,"Average place"),
+    tile(`${wins}`,"1st places"),
+    tile(`${champs}`,"Champions played"),
   ].join("");
+  drawRolling(rollingCanvas, places);
 }
 
-function renderPlacementChartFromList(list) {
+function renderSidebar(){
+  // Wins checklist
+  const byChamp = groupBy(CURRENT.matches, m=>m.championName);
+  const rows = Object.keys(byChamp).sort((a,b)=>a.localeCompare(b)).map(name=>{
+    const got = byChamp[name].some(m=>m.placement===1);
+    return `
+      <div class="check" title="${name}">
+        <img src="${champIcon(name)}" alt="${name}">
+        ${got ? `<div class="tick">✓</div>` : ""}
+      </div>`;
+  }).join("");
+  winsChecklist.innerHTML = rows || `<div class="muted small">Play some games to see this fill up.</div>`;
+
+  // Hardest 1sts
+  const progress = buildProgress(CURRENT.matches);
+  const hardest = Object.values(progress).filter(p=>p.completed).sort((a,b)=>b.attemptsUntilFirst-a.attemptsUntilFirst).slice(0,5);
+  hardestList.innerHTML = hardest.length ? hardest.map(p=>
+    `<span class="tag"><img src="${champIcon(p.name)}" width="16" height="16" style="border-radius:4px;border:1px solid var(--border)"> ${p.name} · ${p.attemptsUntilFirst}</span>`
+  ).join("") : `<div class="muted small">No 1sts yet.</div>`;
+
+  // Placement chart (like TFT sites)
   const counts = Array(8).fill(0);
-  for (const m of list) {
-    const p = Number(m.placement);
-    if (p >= 1 && p <= 8) counts[p-1]++;
-  }
-  renderPlacementChart(counts);
+  for (const m of CURRENT.matches){ const p=Number(m.placement); if (p>=1 && p<=8) counts[p-1]++; }
+  drawPlacementBars(placementsCanvas, counts);
 }
 
-function buildProgress(matches){
-  const byChamp = {};
-  for (const m of matches){
-    if (!byChamp[m.championName]) byChamp[m.championName] = [];
-    byChamp[m.championName].push(m);
+function renderHistory(forcedList){
+  const listAll = (forcedList || CURRENT.matches).slice();
+
+  // filter
+  let list = listAll;
+  if (CURRENT.filter === "wins") {
+    list = listAll.filter(m=>m.placement===1);
+  } else if (CURRENT.filter === "neverwon") {
+    const prog = buildProgress(CURRENT.matches);
+    const lostSet = new Set(Object.values(prog).filter(p=>!p.completed).map(p=>p.name));
+    list = listAll.filter(m=>lostSet.has(m.championName));
   }
+
+  matchesBox.innerHTML = list.map(m=>{
+    const p = Number(m.placement);
+    const cls = p===1?"p1":p===2?"p2":p===3?"p3":"px";
+    const ally = m.allyChampionName ? ` · with ${m.allyChampionName}`:"";
+    return `
+    <article class="item" data-id="${m.matchId}">
+      <div class="icon"><img src="${champIcon(m.championName)}" alt="${m.championName}"></div>
+      <div>
+        <div class="head"><strong>${m.championName}${ally}</strong><span class="badge ${cls}">${ordinal(p)}</span></div>
+        <div class="small">KDA, ${m.kills}/${m.deaths}/${m.assists}</div>
+        <div class="small">Played, ${timeAgo(m.gameStart)}</div>
+      </div>
+    </article>`;
+  }).join("");
+
+  // show/hide more button: if we loaded fewer than last known page size OR haven't tried next page yet
+  btnMore.parentElement.style.display = CURRENT.ids.length && CURRENT.ids.length >= CURRENT.nextStart ? "block" : "block"; // always show; page on demand
+}
+
+function renderSynergy(){
+  // aggregate by allyChampionName for the focus player
+  const agg = {};
+  for (const m of CURRENT.matches){
+    const ally = m.allyChampionName || "Unknown";
+    const a = (agg[ally] ||= { ally, games:0, wins:0, sumPlace:0 });
+    a.games++; a.wins += (m.placement===1 ? 1 : 0); a.sumPlace += Number(m.placement)||0;
+  }
+  const rows = Object.values(agg)
+    .filter(x=>x.ally !== "Unknown")
+    .sort((a,b)=> (b.wins/b.games) - (a.wins/a.games))
+    .map(x=>{
+      const wr = x.games ? Math.round((100*x.wins)/x.games) : 0;
+      const avg = x.games ? (x.sumPlace / x.games).toFixed(2) : "—";
+      return `
+        <tr>
+          <td class="row"><img src="${champIcon(x.ally)}" width="22" height="22" style="border-radius:6px;border:1px solid var(--border)"> ${x.ally}</td>
+          <td>${x.games}</td>
+          <td>${x.wins}</td>
+          <td>${wr}%</td>
+          <td>${avg}</td>
+        </tr>`;
+    }).join("");
+  synergyTableBody.innerHTML = rows || `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
+}
+
+// ---- Progress, Charts, Utils ----
+function buildProgress(matches){
+  const byChamp = groupBy(matches, m=>m.championName);
   const out = {};
   for (const [name, list] of Object.entries(byChamp)){
-    const asc = list.slice().sort((a,b)=>a.gameStart - b.gameStart);
-    const firstIndex = asc.findIndex(x => x.placement === 1);
+    const asc = list.slice().sort((a,b)=>a.gameStart-b.gameStart);
+    const firstIndex = asc.findIndex(x=>x.placement===1);
     const completed = firstIndex !== -1;
-    const attemptsUntilFirst = completed ? firstIndex + 1 : asc.length;
+    const attemptsUntilFirst = completed ? firstIndex+1 : asc.length;
     const when = completed ? asc[firstIndex].gameStart : null;
     out[name] = { name, completed, attemptsUntilFirst, attemptsSoFar: asc.length, when };
   }
   return out;
 }
 
-function renderPlacementChart(counts){
-  const max = Math.max(1, ...counts);
-  placementChart.innerHTML = counts.map((c, i) => {
-    const h = Math.round((c / max) * 100);
-    return `
-      <div class="bar" style="--h:${h}%">
-        <div class="bar-fill"></div>
-        <div class="bar-count">${c}</div>
-        <div class="bar-label">${i+1}</div>
-      </div>
-    `;
-  }).join("");
+function groupBy(list, fn){
+  const map = {};
+  for (const x of list){ const k = fn(x); (map[k] ||= []).push(x); }
+  return map;
 }
 
-function renderRollingAverage(list){
-  const ctx = rollingCanvas.getContext("2d");
-  ctx.clearRect(0,0,rollingCanvas.width,rollingCanvas.height);
+function tile(big,label){ return `<div class="tile"><div class="big">${big}</div><div class="label muted">${label}</div></div>`; }
 
-  const placements = list.map(m => Number(m.placement)).filter(Number.isFinite);
-  if (placements.length === 0) return;
-
-  const ROLLING_WINDOW = 10;
-  const roll = [];
-  for (let i = 0; i < placements.length; i++) {
-    const start = Math.max(0, i - ROLLING_WINDOW + 1);
-    const slice = placements.slice(start, i + 1);
-    roll.push(slice.reduce((a,b)=>a+b,0) / slice.length);
-  }
-
-  const W = rollingCanvas.width, H = rollingCanvas.height, P = 20;
-  const xmin = 0, xmax = roll.length - 1;
-  const ymin = 1, ymax = 8;
-  const x = i => P + (W - 2*P) * (i - xmin) / Math.max(1, xmax - xmin);
-  const y = v => H - P - (H - 2*P) * (v - ymin) / (ymax - ymin);
-
-  const grid = "rgba(154,164,173,0.35)";
-  const line = "#35a854";
+// Canvas bar chart (colors like screenshot: 1st gold, 2nd pink, 3rd blue, 4th teal, others grey)
+function drawPlacementBars(canvas, counts){
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
 
   // grid
-  const ctx2 = ctx;
-  ctx2.strokeStyle = grid; ctx2.lineWidth = 1;
-  ctx2.beginPath(); ctx2.moveTo(P, y(1)); ctx2.lineTo(P, y(8)); ctx2.lineTo(W - P, y(8)); ctx2.stroke();
-  for (let v = 2; v <= 7; v++) { ctx2.beginPath(); ctx2.moveTo(P, y(v)); ctx2.lineTo(W - P, y(v)); ctx2.stroke(); }
+  ctx.strokeStyle = "#2a3340";
+  ctx.lineWidth = 1;
+  const max = Math.max(1, ...counts);
+  const top = Math.ceil(max / 2) * 2; // nice ymax
+  for (let y=0; y<=top; y+=Math.max(1, Math.floor(top/5))){
+    const yy = H - 20 - (H-40) * (y/top);
+    ctx.beginPath(); ctx.moveTo(40, yy); ctx.lineTo(W-10, yy); ctx.stroke();
+    ctx.fillStyle = "#7f8c8d"; ctx.font="12px system-ui"; ctx.fillText(String(y), 10, yy+4);
+  }
+
+  // bars
+  const colors = ["var(--gold)","var(--pink)","var(--blue)","var(--teal)","var(--grey)","var(--grey)","var(--grey)","var(--grey)"];
+  const n = counts.length;
+  const bw = (W-60) / n * 0.7;
+  for (let i=0;i<n;i++){
+    const x = 40 + i * ((W-60)/n) + ((W-60)/n - bw)/2;
+    const h = (H-40) * (counts[i]/top);
+    const y = H - 20 - h;
+
+    ctx.fillStyle = getCSSColor(colors[i]);
+    ctx.fillRect(x, y, bw, h);
+
+    ctx.fillStyle = "#cfd9df";
+    ctx.font = "bold 14px system-ui";
+    ctx.fillText(String(counts[i]), x + bw/2 - 4, y - 4);
+
+    ctx.fillStyle = i<4 ? getCSSColor(colors[i]) : "#cfd9df";
+    const lbl = `${i+1}${["st","nd","rd"][i]||"th"}`;
+    ctx.fillText(lbl, x + bw/2 - 10, H - 4);
+  }
+}
+
+function drawRolling(canvas, placements){
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  if (!placements.length) return;
+
+  // compute rolling avg 10
+  const roll = [];
+  const N = 10;
+  for (let i=0;i<placements.length;i++){
+    const s=Math.max(0,i-N+1), slice=placements.slice(s,i+1);
+    roll.push(slice.reduce((a,b)=>a+b,0)/slice.length);
+  }
+  const xmin=0, xmax=roll.length-1, ymin=1, ymax=8;
+  const x = (i)=> 40 + (W-60)*(i-xmin)/Math.max(1,xmax-xmin);
+  const y = (v)=> H-20 - (H-40)*(v-ymin)/(ymax-ymin);
+
+  // grid
+  ctx.strokeStyle = "#2a3340"; ctx.lineWidth = 1;
+  for(let v=1; v<=8; v++){
+    ctx.beginPath(); ctx.moveTo(40, y(v)); ctx.lineTo(W-20, y(v)); ctx.stroke();
+    if (v%1===0){ ctx.fillStyle="#7f8c8d"; ctx.font="12px system-ui"; ctx.fillText(String(v), 10, y(v)+4); }
+  }
 
   // line
-  ctx2.strokeStyle = line; ctx2.lineWidth = 2;
-  ctx2.beginPath(); ctx2.moveTo(x(0), y(roll[0]));
-  for (let i = 1; i < roll.length; i++) ctx2.lineTo(x(i), y(roll[i]));
-  ctx2.stroke();
+  ctx.strokeStyle = "#35a854"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x(0), y(roll[0]));
+  for (let i=1;i<roll.length;i++) ctx.lineTo(x(i), y(roll[i]));
+  ctx.stroke();
 }
 
-function renderFirstChamps(progress){
-  const done = Object.values(progress).filter(p => p.completed).sort((a,b)=>a.when - b.when);
-  firstCountEl.textContent = String(done.length);
-  firstChampsBox.innerHTML = done.map(p => `
-    <div class="champ" title="${p.name}">
-      <img src="${champIcon(p.name)}" alt="${p.name}">
-      <div class="check">✓</div>
-    </div>
-  `).join("");
+function getCSSColor(token){
+  const el = document.documentElement;
+  const val = getComputedStyle(el).getPropertyValue(token.startsWith("var")? token.match(/var\((.*)\)/)[1].trim() : token);
+  return val || token;
 }
 
-function renderHardest(progress) {
-  const hardest = Object.values(progress)
-    .filter(p => p.completed)
-    .sort((a,b)=>b.attemptsUntilFirst - a.attemptsUntilFirst)
-    .slice(0,10);
-  if (!hardest.length) { document.getElementById("hardest").hidden = true; return; }
-  const box = document.getElementById("hardest");
-  box.hidden = false;
-  box.innerHTML = `
-    <div class="section-title">
-      <strong>Hardest 1st places by attempts</strong>
-      <span class="small">${hardest.length}</span>
-    </div>
-    <div class="list">
-      ${hardest.map(p => `
-        <span class="badge sm"><img src="${champIcon(p.name)}" alt="${p.name}" style="width:16px;height:16px;border-radius:4px;border:1px solid var(--border);vertical-align:-3px;margin-right:6px">${p.name} · ${p.attemptsUntilFirst}</span>
-      `).join("")}
-    </div>
-  `;
-}
+// ---- Tier list (local only) ----
+let tierInit = false;
+const TIERS = ["S","A","B","C","D"];
+function renderTierlistOnce(){
+  if (tierInit) return; tierInit = true;
+  const board = document.getElementById("tier-board");
+  board.innerHTML = TIERS.map(t=>`
+    <div class="tierrow" data-tier="${t}">
+      <div class="tierlabel">${t}</div>
+      <div class="tierlane" id="tier-${t}" data-tier="${t}"></div>
+    </div>`).join("");
 
-function renderMatches(list) {
-  matchesBox.innerHTML = list.map(m => {
-    const place = Number(m.placement);
-    const cls = place === 1 ? "p1" : place === 2 ? "p2" : place === 3 ? "p3" : "px";
-    const when = timeAgo(m.gameStart);
-    const kda = `${m.kills}/${m.deaths}/${m.assists}`;
-    return `
-      <article class="item" data-id="${m.matchId}">
-        <div class="icon"><img src="${champIcon(m.championName)}" alt="${m.championName}"></div>
-        <div>
-          <div class="head">
-            <strong>${m.championName}</strong>
-            <span class="badge ${cls} place">${ordinal(place)}</span>
-          </div>
-          <div class="small">KDA, ${kda}</div>
-          <div class="small">Played, ${when}</div>
-        </div>
-      </article>
-    `;
-  }).join("");
-}
+  const btnEdit = document.getElementById("tier-edit");
+  const btnSave = document.getElementById("tier-save");
+  const btnReset = document.getElementById("tier-reset");
+  const btnExport = document.getElementById("tier-export");
+  const btnImport = document.getElementById("tier-import");
 
-// Modal
-async function openMatchModal(matchId) {
-  try {
-    status("Loading match...");
-    const match = await fetchJSON(`${API_BASE}/match?id=${encodeURIComponent(matchId)}`);
-    renderMatchModal(match);
-    overlay.hidden = false;
-    status("");
-  } catch (e) {
-    console.error(e);
-    status(e.message || "Failed to load match");
+  let editing = false;
+  function setEdit(on){
+    editing = on;
+    document.querySelectorAll(".tierlane").forEach(l=>l.classList.toggle("edit", editing));
   }
-}
-
-function renderMatchModal(match) {
-  const info = match?.info || {};
-  const started = info.gameStartTimestamp ? new Date(info.gameStartTimestamp).toLocaleString() : "?";
-  const q = info.queueId ?? "?";
-
-  const parts = (info.participants || []).slice().sort((a,b) => {
-    const ap = a.placement ?? a.challenges?.arenaPlacement ?? 99;
-    const bp = b.placement ?? b.challenges?.arenaPlacement ?? 99;
-    return ap - bp;
+  btnEdit.addEventListener("click", ()=> setEdit(!editing));
+  btnSave.addEventListener("click", ()=> { saveTierlist(); setEdit(false); });
+  btnReset.addEventListener("click", ()=> { if (confirm("Reset tier list?")){ localStorage.removeItem("arena_tierlist"); loadTierlist(); }});
+  btnExport.addEventListener("click", ()=> {
+    const data = JSON.stringify(readTierlist(), null, 2);
+    navigator.clipboard.writeText(data); alert("Tier list JSON copied to clipboard.");
+  });
+  btnImport.addEventListener("click", async ()=>{
+    const txt = prompt("Paste tier list JSON"); if (!txt) return;
+    try { const obj = JSON.parse(txt); writeTierlist(obj); saveTierlist(); }
+    catch { alert("Invalid JSON"); }
   });
 
-  const rows = parts.map(p => {
-    const me = (p.puuid && p.puuid === CURRENT_PUUID) ? "row-me" : "";
-    const placement = p.placement ?? p.challenges?.arenaPlacement ?? "?";
-    const kda = `${p.kills ?? 0}/${p.deaths ?? 0}/${p.assists ?? 0}`;
-    const dmg = p.totalDamageDealtToChampions ?? p.challenges?.teamDamagePercentage ?? 0;
-    const gold = p.goldEarned ?? 0;
-    const items = [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6]
-      .filter(v => Number.isFinite(v) && v > 0)
-      .map(id => `<img src="${itemIcon(id)}" alt="${id}">`).join("");
-    const augments = [p.playerAugment1, p.playerAugment2, p.playerAugment3, p.playerAugment4]
-      .filter(Boolean)
-      .map(a => `<span class="badge sm">${a}</span>`).join(" ");
+  // drag & drop
+  document.addEventListener("dragstart", (e)=>{
+    if (!editing) return;
+    const item = e.target.closest(".draggable"); if (!item) return;
+    e.dataTransfer.setData("text/plain", item.dataset.champ);
+  });
+  document.addEventListener("dragover", (e)=>{
+    if (!editing) return;
+    if (e.target.closest(".tierlane")) e.preventDefault();
+  });
+  document.addEventListener("drop", (e)=>{
+    if (!editing) return;
+    const lane = e.target.closest(".tierlane"); if (!lane) return;
+    e.preventDefault();
+    const champ = e.dataTransfer.getData("text/plain");
+    if (!champ) return;
+    lane.appendChild(makeDraggable(champ));
+  });
 
-    return `
-      <tr class="${me}">
-        <td class="row" style="white-space:nowrap">
-          <img src="${champIcon(p.championName)}" alt="${p.championName}" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--border);margin-right:6px">
-          ${p.championName}
-        </td>
-        <td>${ordinal(Number(placement))}</td>
-        <td>${kda}</td>
-        <td>${Number(gold).toLocaleString()}</td>
-        <td>${Number.isFinite(dmg) ? Number(dmg).toLocaleString() : "?"}</td>
-        <td><div class="item-icons">${items || ""}</div></td>
-        <td>${augments || ""}</td>
-      </tr>
-    `;
-  }).join("");
-
-  modalBody.innerHTML = `
-    <h3 id="modal-title">Match ${match.metadata?.matchId || ""}</h3>
-    <div class="small" style="margin-bottom:8px">Queue ${q} • ${started}</div>
-    <div style="overflow:auto">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Champion</th>
-            <th>Place</th>
-            <th>K / D / A</th>
-            <th>Gold</th>
-            <th>Damage</th>
-            <th>Items</th>
-            <th>Augments</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
+  // initial load champions & tier list
+  initChampionList().then(()=> loadTierlist());
 }
 
-// Submit, auto full history
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const raw = riotIdInput.value.trim();
-  if (!raw.includes("#")) { alert("Write your Riot ID like Name#TAG"); return; }
-  const [gameName, tagLine] = raw.split("#");
-  setParam("id", `${gameName}#${tagLine}`);
-  resetUI();
-  status("Looking up account...");
+async function initChampionList(){
+  // Ensure DD_VERSION already set
+  // nothing to do here; lane fills from tierlist JSON
+}
 
-  await initDDragon();
-
-  try {
-    const acc = await fetchJSON(`${API_BASE}/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`);
-    CURRENT_PUUID = acc.puuid;
-    CURRENT_PLAYER_TAG = `${acc.gameName}#${acc.tagLine}`;
-
-    // render cached immediately if exists
-    const cached = loadCache(CURRENT_PUUID);
-    if (cached?.matches?.length) {
-      LAST_MATCHES = cached.matches.slice().sort((a,b)=>b.gameStart - a.gameStart);
-      PROGRESS = buildProgress(LAST_MATCHES);
-      renderAll();
-      setLastUpdated(cached.updatedAt);
-      // auto refresh if stale
-      const stale = !cached.updatedAt || (Date.now() - cached.updatedAt) > STALE_AFTER_MS;
-      if (stale) refreshNow(false);
-    } else {
-      // first time, fetch all history
-      await refreshNow(false, true);
-    }
-
-    filters.hidden = false;
-    status("");
-
-  } catch (err) {
-    console.error(err);
-    status(err.message || "Error");
-  }
-});
-
-// Refresh logic, like opgg update
-async function refreshNow(force, fetchAllIfFirst = false) {
-  if (!CURRENT_PUUID) return;
-  try {
-    status("Updating...");
-    // quick newest id
-    const newestIds = await fetchJSON(`${API_BASE}/match-ids?puuid=${CURRENT_PUUID}&queue=${ARENA_QUEUE}&start=0&count=1`);
-    const newest = newestIds[0] || null;
-
-    const cached = loadCache(CURRENT_PUUID) || {};
-    const knownMatches = cached.matches || [];
-    const knownIdsSet = new Set(knownMatches.map(m => m.matchId));
-
-    // if first time or forced full, fetch all ids
-    let ids;
-    if (fetchAllIfFirst || force || !cached.hasFullHistory) {
-      ids = await fetchAllIds(CURRENT_PUUID, ARENA_QUEUE);
-    } else {
-      // incremental, fetch first 300 ids to catch recent games
-      ids = await fetchJSON(`${API_BASE}/match-ids?puuid=${CURRENT_PUUID}&queue=${ARENA_QUEUE}&start=0&count=300`);
-    }
-
-    // decide which ids to fetch
-    const idsToFetch = ids.filter(id => !knownIdsSet.has(id));
-
-    // fetch details
-    let newlyFetched = [];
-    if (idsToFetch.length) {
-      newlyFetched = await fetchMatchesInChunks(idsToFetch, CURRENT_PUUID);
-    }
-
-    // union and render
-    const union = dedupeById((newlyFetched.length ? newlyFetched : []).concat(knownMatches))
-      .sort((a,b)=>b.gameStart - a.gameStart);
-    LAST_MATCHES = union;
-    PROGRESS = buildProgress(LAST_MATCHES);
-    renderAll();
-
-    // determine if we reached full history, true if ids ended with an empty page or less than 100 at the tail
-    const hasFullHistory = fetchAllIfFirst || ids.length >= (knownMatches.length ? 1 : 0);
-
-    // save
-    const toSave = {
-      latestId: newest || cached.latestId || null,
-      matches: LAST_MATCHES,
-      updatedAt: Date.now(),
-      hasFullHistory: hasFullHistory
-    };
-    saveCache(CURRENT_PUUID, toSave);
-    setLastUpdated(toSave.updatedAt);
-    status("Updated.");
-    setTimeout(()=>status(""), 1200);
-
-  } catch (e) {
-    console.error(e);
-    status(e.message || "Update failed");
+function makeDraggable(champ){
+  const el = document.createElement("div");
+  el.className = "draggable"; el.draggable = true; el.dataset.champ = champ;
+  el.innerHTML = `<img src="${champIcon(champ)}" alt="${champ}">`;
+  return el;
+}
+function writeTierlist(obj){
+  // obj: { S:["Ahri",...], A:[], ...}
+  document.querySelectorAll(".tierlane").forEach(l=>l.innerHTML="");
+  for (const t of TIERS){
+    for (const c of (obj[t]||[])) document.getElementById(`tier-${t}`).appendChild(makeDraggable(c));
   }
 }
-
-// Utils
-function tile(big, label) { return `<div class="tile"><div class="big kpi">${big}</div><div class="label">${label}</div></div>`; }
-function status(t) { statusBox.textContent = t; }
-function resetUI() {
-  summaryBox.innerHTML = "";
-  matchesBox.innerHTML = "";
-  filters.hidden = true;
-  viz.hidden = true;
-  document.getElementById("hardest").hidden = true;
-  firstChampsBox.innerHTML = "";
-  placementChart.innerHTML = "";
-  const ctx = rollingCanvas.getContext("2d");
-  ctx.clearRect(0,0,rollingCanvas.width,rollingCanvas.height);
-  setLastUpdated(null);
-  status("");
-}
-function timeAgo(ts) {
-  if (!ts) return "unknown";
-  const s = Math.max(1, Math.floor((Date.now() - Number(ts)) / 1000));
-  const mins = Math.floor(s / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 48) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
-
-// Modal loader
-async function openMatchModal(matchId) {
-  try {
-    status("Loading match...");
-    const match = await fetchJSON(`${API_BASE}/match?id=${encodeURIComponent(matchId)}`);
-    renderMatchModal(match);
-    overlay.hidden = false;
-    status("");
-  } catch (e) {
-    console.error(e);
-    status(e.message || "Failed to load match");
+function readTierlist(){
+  const out = {};
+  for (const t of TIERS){
+    const lane = document.getElementById(`tier-${t}`);
+    out[t] = [...lane.querySelectorAll(".draggable")].map(d=>d.dataset.champ);
   }
+  return out;
+}
+function saveTierlist(){ localStorage.setItem("arena_tierlist", JSON.stringify(readTierlist())); }
+function loadTierlist(){
+  const raw = localStorage.getItem("arena_tierlist");
+  if (raw){ writeTierlist(JSON.parse(raw)); return; }
+  // default empty
+  writeTierlist({ S:[],A:[],B:[],C:[],D:[] });
 }
 
-// Kick off
-prefillFromURL();
+// ---- Drawing/processing helpers ----
+function buildPlacementArray(list){ const c=Array(8).fill(0); for(const m of list){ const p=Number(m.placement); if(p>=1 && p<=8) c[p-1]++; } return c; }
+
+function groupWinsChecklist(){ /* already in renderSidebar */ }
+
+// ---- Done ----
