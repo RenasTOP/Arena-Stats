@@ -21,14 +21,9 @@
           <button data-filter="inprogress">Left for Arena God</button>
         </nav>
 
-        <div class="range">
-          <label for="range-select">Range</label>
-          <select id="range-select">
-            <option value="all">All time</option>
-            <option value="7d">Last 7d</option>
-            <option value="30d">Last 30d</option>
-            <option value="90d">Last 90d</option>
-          </select>
+        <div class="right-tools">
+          <button id="btn-update" title="Force refresh like opgg">Update</button>
+          <div id="last-updated" class="muted small" aria-live="polite"></div>
         </div>
       </div>
     </header>
@@ -42,15 +37,6 @@
 
     <!-- KPIs -->
     <section id="summary" class="card summary"></section>
-
-    <!-- Actions -->
-    <section id="actions" class="actions" hidden>
-      <button id="load-more">Load next 200</button>
-      <button id="load-all" class="ghost">Load all, slow</button>
-      <button id="export-csv" class="ghost">Export CSV</button>
-      <button id="copy-link" class="ghost">Copy link</button>
-      <button id="clear-cache" class="ghost red">Clear cache</button>
-    </section>
 
     <!-- Visuals -->
     <section id="viz" class="grid-2" hidden>
@@ -91,11 +77,10 @@
   </main>
 
   <footer class="footer">
-    <small>Powered by Riot Games API, icons by Data Dragon. Made by @renas2g</small>
+    <small class="muted">Powered by Riot Games API, icons by Data Dragon. Made by @renas2g</small>
   </footer>
 
   <script>
-    // service worker
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker.register("./sw.js").catch(()=>{});
@@ -104,7 +89,6 @@
   </script>
 
   <script type="module">
-    // simple cache buster for dev
     const ver = new Date(document.lastModified).getTime();
     document.getElementById('css').href = `styles.css?v=${ver}`;
     import(`./app.js?v=${ver}`);
