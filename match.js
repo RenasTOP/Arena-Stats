@@ -1,5 +1,5 @@
 // Match details page
-const API_BASE = "https://YOUR-WORKER-SUBDOMAIN.workers.dev"; // <<< EDIT ME
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // <<< EDIT ME
 
 let DD_VERSION = "15.16.1";
 const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Khazix", VelKoz:"Velkoz", ChoGath:"Chogath", KaiSa:"Kaisa", LeBlanc:"Leblanc", DrMundo:"DrMundo", Nunu:"Nunu", Renata:"Renata", RekSai:"RekSai", KogMaw:"KogMaw", BelVeth:"Belveth", TahmKench:"TahmKench" };
