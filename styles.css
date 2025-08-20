@@ -23,7 +23,12 @@ button.ghost{background:#202736;border:1px solid var(--border);color:var(--text)
 button.red{border-color:#5a1e1e;color:#ffb3b3}
 
 /* ===== Layout ===== */
-.layout{display:grid;grid-template-columns:280px 1fr;gap:14px;margin:16px auto}
+.layout{
+  display:grid;
+  grid-template-columns:320px 1fr; /* slightly wider sidebar for alignment */
+  gap:14px;
+  margin:16px auto
+}
 .sidebar .card{margin-bottom:12px}
 .card{padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--panel)}
 .section-title{display:flex;justify-content:space-between;align-items:center}
@@ -42,6 +47,30 @@ button.red{border-color:#5a1e1e;color:#ffb3b3}
 .check .tick{position:absolute;right:-4px;bottom:-4px;width:16px;height:16px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:#fff;font-size:12px;border:1px solid var(--border)}
 .tags{display:flex;flex-wrap:wrap;gap:6px}
 .tag{display:inline-flex;align-items:center;gap:6px;background:#0e131a;border:1px solid var(--border);border-radius:999px;padding:4px 10px}
+
+/* ===== Filters (segmented control) ===== */
+.filters.segmented{
+  display:inline-flex;
+  gap:0;
+  background:#0e131a;
+  border:1px solid var(--border);
+  border-radius:999px;
+  padding:4px;
+  margin-bottom:10px;
+}
+.filters.segmented button{
+  border:0;
+  background:transparent;
+  color:var(--muted);
+  padding:6px 12px;
+  border-radius:999px;
+  cursor:pointer;
+}
+.filters.segmented button:hover{ color:#d7dee5; }
+.filters.segmented button.active{
+  background:var(--green);
+  color:#fff;
+}
 
 /* ===== Tables & grid ===== */
 .table{width:100%;border-collapse:collapse;font-size:.95rem}
@@ -77,3 +106,6 @@ button.red{border-color:#5a1e1e;color:#ffb3b3}
   .layout{grid-template-columns:1fr}
   .kpis{grid-template-columns:repeat(2,1fr)}
 }
+
+/* Canvas friendly sizing */
+canvas{max-width:100%;height:auto}
