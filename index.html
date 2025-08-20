@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Arena.gg</title>
-  <link rel="stylesheet" href="styles.css?v=build4">
+  <link rel="stylesheet" href="styles.css?v=build6">
 </head>
 <body>
   <header class="topbar">
@@ -25,7 +25,6 @@
   </header>
 
   <main class="container layout">
-    <!-- Left sidebar -->
     <aside class="sidebar">
       <section class="card">
         <h3>Wins checklist</h3>
@@ -48,52 +47,39 @@
       <div class="muted small" id="last-updated"></div>
     </aside>
 
-    <!-- Right content -->
     <section class="content">
-      <!-- OVERVIEW -->
       <div id="tab-overview" class="tab active">
         <section class="kpis card" id="kpis"></section>
-
         <section class="card">
           <h3>Recent performance</h3>
           <canvas id="rolling-canvas" width="920" height="240"></canvas>
         </section>
       </div>
 
-      <!-- HISTORY -->
       <div id="tab-history" class="tab">
         <div class="filters">
           <button data-filter="all" class="active">All</button>
           <button data-filter="wins">1st place only</button>
           <button data-filter="neverwon">Champions without a 1st</button>
         </div>
-
         <section id="matches" class="grid"></section>
         <div id="more" class="more">
           <button id="btn-more" class="ghost">Load 100 more</button>
         </div>
       </div>
 
-      <!-- SYNERGY -->
       <div id="tab-synergy" class="tab">
         <section class="card">
           <h3>Duo synergies (your ally pair)</h3>
           <table class="table" id="synergy-table">
             <thead>
-              <tr>
-                <th>Ally champion</th>
-                <th>Games</th>
-                <th>Wins</th>
-                <th>Win %</th>
-                <th>Avg place</th>
-              </tr>
+              <tr><th>Ally champion</th><th>Games</th><th>Wins</th><th>Win %</th><th>Avg place</th></tr>
             </thead>
             <tbody></tbody>
           </table>
         </section>
       </div>
 
-      <!-- TIER LIST -->
       <div id="tab-tierlist" class="tab">
         <section class="card">
           <div class="tierbar">
@@ -107,10 +93,7 @@
               <button id="tier-import" class="ghost">Import</button>
             </div>
           </div>
-
-          <div id="tier-board" class="tierboard">
-            <!-- built in JS: S/A/B/C/D rows -->
-          </div>
+          <div id="tier-board" class="tierboard"></div>
         </section>
       </div>
     </section>
@@ -120,6 +103,6 @@
     <div class="container muted">Powered by Riot Games API, icons by Data Dragon. Made by @renas2g</div>
   </footer>
 
-  <script type="module" src="app.js?v=build4"></script>
+  <script type="module" src="app.js?v=build6"></script>
 </body>
 </html>
