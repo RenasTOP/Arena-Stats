@@ -1,12 +1,13 @@
-/* Arena Progress Tracker app, full history autoload
+/* Arena Progress Tracker, auto full history with single Update button
    Author, Renas
 */
 
+// Config
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
 const ARENA_QUEUE = 1700;
-
 const CHUNK_SIZE = 10;
 const CHUNK_DELAY_MS = 700;
+const STALE_AFTER_MS = 6 * 60 * 60 * 1000; // 6h, for auto refresh like opgg
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -17,20 +18,14 @@ const statusBox = document.getElementById("status");
 const summaryBox = document.getElementById("summary");
 const matchesBox = document.getElementById("matches");
 const filters = document.getElementById("filters");
-
-const actions = document.getElementById("actions");
-const btnMore  = document.getElementById("load-more");
-const btnAll   = document.getElementById("load-all");
-const btnCSV   = document.getElementById("export-csv");
-const btnCopy  = document.getElementById("copy-link");
-const btnClear = document.getElementById("clear-cache");
+const btnUpdate = document.getElementById("btn-update");
+const lastUpdatedEl = document.getElementById("last-updated");
 
 // visuals
 const viz = document.getElementById("viz");
 const placementChart = document.getElementById("placement-chart");
 const firstChampsBox = document.getElementById("first-champs");
 const firstCountEl   = document.getElementById("first-count");
-const rangeSelect    = document.getElementById("range-select");
 const rollingCanvas  = document.getElementById("rolling-canvas");
 
 // modal
@@ -41,26 +36,19 @@ if (closeBtn) closeBtn.addEventListener("click", () => (overlay.hidden = true));
 if (overlay) overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.hidden = true; });
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay && !overlay.hidden) overlay.hidden = true; });
 
-// hardest
-const hardestBox = document.getElementById("hardest");
-
 // state
 let LAST_MATCHES = [];
 let PROGRESS = null;
 let CURRENT_PUUID = null;
 let CURRENT_PLAYER_TAG = "";
-let NEXT_START = 0;
 
-// events
+// Actions
+btnUpdate?.addEventListener("click", () => refreshNow(true));
+
 filters?.addEventListener("click", (e) => {
   if (e.target.tagName !== "BUTTON") return;
   [...filters.querySelectorAll("button")].forEach(b => b.classList.remove("active"));
   e.target.classList.add("active");
-  renderAll();
-});
-
-rangeSelect?.addEventListener("change", () => {
-  setParam("range", rangeSelect.value);
   renderAll();
 });
 
@@ -70,10 +58,6 @@ matchesBox.addEventListener("click", (e) => {
   const id = card.dataset.id;
   if (id) openMatchModal(id);
 });
-
-btnCSV?.addEventListener("click", () => exportCSV());
-btnCopy?.addEventListener("click", () => copyLink());
-btnClear?.addEventListener("click", () => clearCache());
 
 // Data Dragon
 let DD_VERSION = "15.16.1";
@@ -109,15 +93,13 @@ function setParam(name, v) {
 }
 function prefillFromURL() {
   const id = getParam("id");
-  const range = getParam("range");
-  if (range) rangeSelect.value = range;
   if (id) {
     riotIdInput.value = id;
     setTimeout(()=>form.dispatchEvent(new Event("submit", {cancelable:true})), 0);
   }
 }
 
-// cache
+// Cache
 function cacheKey(puuid){ return `arena_cache:${puuid}`; }
 function loadCache(puuid){
   try { return JSON.parse(localStorage.getItem(cacheKey(puuid)) || "null"); } catch { return null; }
@@ -125,16 +107,13 @@ function loadCache(puuid){
 function saveCache(puuid, data){
   try { localStorage.setItem(cacheKey(puuid), JSON.stringify(data)); } catch {}
 }
-function clearCache() {
-  if (!CURRENT_PUUID) return;
-  if (confirm("Clear local cache for this player?")) {
-    localStorage.removeItem(cacheKey(CURRENT_PUUID));
-    resetUI();
-    status("Cache cleared.");
-  }
+function setLastUpdated(ts) {
+  if (!ts) { lastUpdatedEl.textContent = ""; return; }
+  const d = new Date(ts);
+  lastUpdatedEl.textContent = `Last updated, ${d.toLocaleString()}`;
 }
 
-// fetch with backoff
+// Fetch with backoff
 async function fetchJSON(url, tries = 3, delay = 600) {
   const r = await fetch(url);
   if (r.ok) return r.json();
@@ -147,7 +126,7 @@ async function fetchJSON(url, tries = 3, delay = 600) {
   throw new Error(`Request failed, ${r.status}${text ? `, ${text}` : ""}`);
 }
 
-// core paging, fetch all ids until empty page
+// Core helpers
 async function fetchAllIds(puuid, queue = ARENA_QUEUE) {
   const ids = [];
   let start = 0;
@@ -162,7 +141,6 @@ async function fetchAllIds(puuid, queue = ARENA_QUEUE) {
     if (batch.length < PER) break;
   }
   status(`Fetched ${ids.length} match ids`);
-  NEXT_START = start;
   return ids;
 }
 
@@ -186,7 +164,6 @@ async function fetchMatchesInChunks(ids, puuid) {
     const part = await fetchJSON(`${API_BASE}/matches?ids=${slice.join(",")}&puuid=${puuid}`);
     collected = collected.concat(part);
 
-    // live union preview, do not wipe older ones
     const preview = dedupeById(LAST_MATCHES.concat(collected)).sort((a,b)=>b.gameStart - a.gameStart);
     renderMatches(preview);
 
@@ -195,20 +172,10 @@ async function fetchMatchesInChunks(ids, puuid) {
   return collected;
 }
 
-// filters and rendering helpers
+// Filters
 function activeFilter() {
   const btn = filters.querySelector("button.active");
   return btn ? btn.dataset.filter : "all";
-}
-function timeRangeFilter(ts) {
-  const mode = rangeSelect?.value || "all";
-  if (mode === "all") return true;
-  const now = Date.now();
-  const days = mode === "7d" ? 7 : mode === "30d" ? 30 : 90;
-  return Number(ts) >= now - days*24*60*60*1000;
-}
-function baseFilteredList() {
-  return LAST_MATCHES.filter(m => timeRangeFilter(m.gameStart)).sort((a,b)=>b.gameStart - a.gameStart);
 }
 function filterMatchesByMode(list, mode) {
   if (mode === "top3") return list.filter(m => Number(m.placement) && m.placement <= 3);
@@ -220,21 +187,21 @@ function filterMatchesByMode(list, mode) {
   return list;
 }
 
-// visuals
+// Render pipeline
 function renderAll() {
-  const base = baseFilteredList();
   const mode = activeFilter();
-  const list = filterMatchesByMode(base, mode);
+  const list = filterMatchesByMode(LAST_MATCHES, mode);
 
-  const progressForRange = buildProgress(base);
-  renderSummary(base, progressForRange);
-  renderPlacementChartFromList(base);
-  renderRollingAverage(base);
+  const progressForRange = buildProgress(LAST_MATCHES);
+  renderSummary(LAST_MATCHES, progressForRange);
+  renderPlacementChartFromList(LAST_MATCHES);
+  renderRollingAverage(LAST_MATCHES);
   renderFirstChamps(PROGRESS);
   renderHardest(PROGRESS);
   renderMatches(list);
   viz.hidden = false;
 }
+
 function renderSummary(list, progressForRange) {
   const total = list.length;
   const places = list.map(m => Number(m.placement)).filter(x => Number.isFinite(x));
@@ -243,11 +210,12 @@ function renderSummary(list, progressForRange) {
   const arenaGodNeeded = Math.max(0, 60 - completedLifetime);
   summaryBox.innerHTML = [
     tile(CURRENT_PLAYER_TAG, "Player"),
-    tile(`${total}`, "Total Arena games, in view"),
-    tile(`${avgPlace}`, "Average place, in view"),
+    tile(`${total}`, "Total Arena games"),
+    tile(`${avgPlace}`, "Average place"),
     tile(`${completedLifetime}/60`, `Arena God, ${arenaGodNeeded} left`),
   ].join("");
 }
+
 function renderPlacementChartFromList(list) {
   const counts = Array(8).fill(0);
   for (const m of list) {
@@ -256,6 +224,7 @@ function renderPlacementChartFromList(list) {
   }
   renderPlacementChart(counts);
 }
+
 function buildProgress(matches){
   const byChamp = {};
   for (const m of matches){
@@ -273,6 +242,7 @@ function buildProgress(matches){
   }
   return out;
 }
+
 function renderPlacementChart(counts){
   const max = Math.max(1, ...counts);
   placementChart.innerHTML = counts.map((c, i) => {
@@ -286,12 +256,14 @@ function renderPlacementChart(counts){
     `;
   }).join("");
 }
+
 function renderRollingAverage(list){
-  if (!rollingCanvas) return;
   const ctx = rollingCanvas.getContext("2d");
   ctx.clearRect(0,0,rollingCanvas.width,rollingCanvas.height);
+
   const placements = list.map(m => Number(m.placement)).filter(Number.isFinite);
   if (placements.length === 0) return;
+
   const ROLLING_WINDOW = 10;
   const roll = [];
   for (let i = 0; i < placements.length; i++) {
@@ -299,22 +271,29 @@ function renderRollingAverage(list){
     const slice = placements.slice(start, i + 1);
     roll.push(slice.reduce((a,b)=>a+b,0) / slice.length);
   }
+
   const W = rollingCanvas.width, H = rollingCanvas.height, P = 20;
   const xmin = 0, xmax = roll.length - 1;
   const ymin = 1, ymax = 8;
   const x = i => P + (W - 2*P) * (i - xmin) / Math.max(1, xmax - xmin);
   const y = v => H - P - (H - 2*P) * (v - ymin) / (ymax - ymin);
-  // axes
+
   const grid = "rgba(154,164,173,0.35)";
-  ctx.strokeStyle = grid; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(P, y(1)); ctx.lineTo(P, y(8)); ctx.lineTo(W - P, y(8)); ctx.stroke();
-  for (let v = 2; v <= 7; v++) { ctx.beginPath(); ctx.moveTo(P, y(v)); ctx.lineTo(W - P, y(v)); ctx.stroke(); }
+  const line = "#35a854";
+
+  // grid
+  const ctx2 = ctx;
+  ctx2.strokeStyle = grid; ctx2.lineWidth = 1;
+  ctx2.beginPath(); ctx2.moveTo(P, y(1)); ctx2.lineTo(P, y(8)); ctx2.lineTo(W - P, y(8)); ctx2.stroke();
+  for (let v = 2; v <= 7; v++) { ctx2.beginPath(); ctx2.moveTo(P, y(v)); ctx2.lineTo(W - P, y(v)); ctx2.stroke(); }
+
   // line
-  ctx.strokeStyle = "#35a854"; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(x(0), y(roll[0]));
-  for (let i = 1; i < roll.length; i++) ctx.lineTo(x(i), y(roll[i]));
-  ctx.stroke();
+  ctx2.strokeStyle = line; ctx2.lineWidth = 2;
+  ctx2.beginPath(); ctx2.moveTo(x(0), y(roll[0]));
+  for (let i = 1; i < roll.length; i++) ctx2.lineTo(x(i), y(roll[i]));
+  ctx2.stroke();
 }
+
 function renderFirstChamps(progress){
   const done = Object.values(progress).filter(p => p.completed).sort((a,b)=>a.when - b.when);
   firstCountEl.textContent = String(done.length);
@@ -325,12 +304,16 @@ function renderFirstChamps(progress){
     </div>
   `).join("");
 }
+
 function renderHardest(progress) {
-  const hardest = Object.values(progress).filter(p => p.completed)
-    .sort((a,b)=>b.attemptsUntilFirst - a.attemptsUntilFirst).slice(0,10);
-  if (!hardest.length) { hardestBox.hidden = true; hardestBox.innerHTML = ""; return; }
-  hardestBox.hidden = false;
-  hardestBox.innerHTML = `
+  const hardest = Object.values(progress)
+    .filter(p => p.completed)
+    .sort((a,b)=>b.attemptsUntilFirst - a.attemptsUntilFirst)
+    .slice(0,10);
+  if (!hardest.length) { document.getElementById("hardest").hidden = true; return; }
+  const box = document.getElementById("hardest");
+  box.hidden = false;
+  box.innerHTML = `
     <div class="section-title">
       <strong>Hardest 1st places by attempts</strong>
       <span class="small">${hardest.length}</span>
@@ -342,6 +325,7 @@ function renderHardest(progress) {
     </div>
   `;
 }
+
 function renderMatches(list) {
   matchesBox.innerHTML = list.map(m => {
     const place = Number(m.placement);
@@ -364,7 +348,7 @@ function renderMatches(list) {
   }).join("");
 }
 
-// modal
+// Modal
 async function openMatchModal(matchId) {
   try {
     status("Loading match...");
@@ -377,15 +361,18 @@ async function openMatchModal(matchId) {
     status(e.message || "Failed to load match");
   }
 }
+
 function renderMatchModal(match) {
   const info = match?.info || {};
   const started = info.gameStartTimestamp ? new Date(info.gameStartTimestamp).toLocaleString() : "?";
   const q = info.queueId ?? "?";
+
   const parts = (info.participants || []).slice().sort((a,b) => {
     const ap = a.placement ?? a.challenges?.arenaPlacement ?? 99;
     const bp = b.placement ?? b.challenges?.arenaPlacement ?? 99;
     return ap - bp;
   });
+
   const rows = parts.map(p => {
     const me = (p.puuid && p.puuid === CURRENT_PUUID) ? "row-me" : "";
     const placement = p.placement ?? p.challenges?.arenaPlacement ?? "?";
@@ -398,6 +385,7 @@ function renderMatchModal(match) {
     const augments = [p.playerAugment1, p.playerAugment2, p.playerAugment3, p.playerAugment4]
       .filter(Boolean)
       .map(a => `<span class="badge sm">${a}</span>`).join(" ");
+
     return `
       <tr class="${me}">
         <td class="row" style="white-space:nowrap">
@@ -413,8 +401,9 @@ function renderMatchModal(match) {
       </tr>
     `;
   }).join("");
+
   modalBody.innerHTML = `
-    <h3>Match ${match.metadata?.matchId || ""}</h3>
+    <h3 id="modal-title">Match ${match.metadata?.matchId || ""}</h3>
     <div class="small" style="margin-bottom:8px">Queue ${q} • ${started}</div>
     <div style="overflow:auto">
       <table class="table">
@@ -435,7 +424,7 @@ function renderMatchModal(match) {
   `;
 }
 
-// submit, auto load everything
+// Submit, auto full history
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const raw = riotIdInput.value.trim();
@@ -452,48 +441,23 @@ form.addEventListener("submit", async (e) => {
     CURRENT_PUUID = acc.puuid;
     CURRENT_PLAYER_TAG = `${acc.gameName}#${acc.tagLine}`;
 
-    // load everything
-    filters.hidden = false;
-    actions.hidden = true; // no manual buttons needed for your use case
-
-    // try cache to render something quick
-    const cached = loadCache(acc.puuid);
+    // render cached immediately if exists
+    const cached = loadCache(CURRENT_PUUID);
     if (cached?.matches?.length) {
       LAST_MATCHES = cached.matches.slice().sort((a,b)=>b.gameStart - a.gameStart);
       PROGRESS = buildProgress(LAST_MATCHES);
       renderAll();
-      status("Refreshing with full history...");
+      setLastUpdated(cached.updatedAt);
+      // auto refresh if stale
+      const stale = !cached.updatedAt || (Date.now() - cached.updatedAt) > STALE_AFTER_MS;
+      if (stale) refreshNow(false);
+    } else {
+      // first time, fetch all history
+      await refreshNow(false, true);
     }
 
-    // fetch all ids
-    const allIds = await fetchAllIds(CURRENT_PUUID, ARENA_QUEUE);
-
-    // if we had cache, skip already known matches
-    const known = new Set((cached?.matches || []).map(m => m.matchId));
-    const idsToFetch = allIds.filter(id => !known.has(id));
-
-    // fetch details for the new ones, most recent first
-    let newlyFetched = [];
-    if (idsToFetch.length) {
-      status(`Fetching ${idsToFetch.length} matches...`);
-      newlyFetched = await fetchMatchesInChunks(idsToFetch, CURRENT_PUUID);
-    }
-
-    // final union
-    const union = dedupeById((newlyFetched.length ? newlyFetched : []).concat(cached?.matches || []))
-      .sort((a,b)=>b.gameStart - a.gameStart);
-    LAST_MATCHES = union;
-    PROGRESS = buildProgress(LAST_MATCHES);
-    renderAll();
+    filters.hidden = false;
     status("");
-
-    // save
-    saveCache(CURRENT_PUUID, {
-      latestId: allIds[0] || null,
-      matches: LAST_MATCHES,
-      updatedAt: Date.now(),
-      nextStart: NEXT_START,
-    });
 
   } catch (err) {
     console.error(err);
@@ -501,22 +465,79 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
-// utils
+// Refresh logic, like opgg update
+async function refreshNow(force, fetchAllIfFirst = false) {
+  if (!CURRENT_PUUID) return;
+  try {
+    status("Updating...");
+    // quick newest id
+    const newestIds = await fetchJSON(`${API_BASE}/match-ids?puuid=${CURRENT_PUUID}&queue=${ARENA_QUEUE}&start=0&count=1`);
+    const newest = newestIds[0] || null;
+
+    const cached = loadCache(CURRENT_PUUID) || {};
+    const knownMatches = cached.matches || [];
+    const knownIdsSet = new Set(knownMatches.map(m => m.matchId));
+
+    // if first time or forced full, fetch all ids
+    let ids;
+    if (fetchAllIfFirst || force || !cached.hasFullHistory) {
+      ids = await fetchAllIds(CURRENT_PUUID, ARENA_QUEUE);
+    } else {
+      // incremental, fetch first 300 ids to catch recent games
+      ids = await fetchJSON(`${API_BASE}/match-ids?puuid=${CURRENT_PUUID}&queue=${ARENA_QUEUE}&start=0&count=300`);
+    }
+
+    // decide which ids to fetch
+    const idsToFetch = ids.filter(id => !knownIdsSet.has(id));
+
+    // fetch details
+    let newlyFetched = [];
+    if (idsToFetch.length) {
+      newlyFetched = await fetchMatchesInChunks(idsToFetch, CURRENT_PUUID);
+    }
+
+    // union and render
+    const union = dedupeById((newlyFetched.length ? newlyFetched : []).concat(knownMatches))
+      .sort((a,b)=>b.gameStart - a.gameStart);
+    LAST_MATCHES = union;
+    PROGRESS = buildProgress(LAST_MATCHES);
+    renderAll();
+
+    // determine if we reached full history, true if ids ended with an empty page or less than 100 at the tail
+    const hasFullHistory = fetchAllIfFirst || ids.length >= (knownMatches.length ? 1 : 0);
+
+    // save
+    const toSave = {
+      latestId: newest || cached.latestId || null,
+      matches: LAST_MATCHES,
+      updatedAt: Date.now(),
+      hasFullHistory: hasFullHistory
+    };
+    saveCache(CURRENT_PUUID, toSave);
+    setLastUpdated(toSave.updatedAt);
+    status("Updated.");
+    setTimeout(()=>status(""), 1200);
+
+  } catch (e) {
+    console.error(e);
+    status(e.message || "Update failed");
+  }
+}
+
+// Utils
 function tile(big, label) { return `<div class="tile"><div class="big kpi">${big}</div><div class="label">${label}</div></div>`; }
 function status(t) { statusBox.textContent = t; }
 function resetUI() {
   summaryBox.innerHTML = "";
   matchesBox.innerHTML = "";
   filters.hidden = true;
-  actions.hidden = true;
   viz.hidden = true;
-  hardestBox.hidden = true;
+  document.getElementById("hardest").hidden = true;
   firstChampsBox.innerHTML = "";
   placementChart.innerHTML = "";
-  if (rollingCanvas) {
-    const ctx = rollingCanvas.getContext("2d");
-    ctx.clearRect(0,0,rollingCanvas.width,rollingCanvas.height);
-  }
+  const ctx = rollingCanvas.getContext("2d");
+  ctx.clearRect(0,0,rollingCanvas.width,rollingCanvas.height);
+  setLastUpdated(null);
   status("");
 }
 function timeAgo(ts) {
@@ -529,37 +550,20 @@ function timeAgo(ts) {
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
 }
-function copyLink() {
-  const u = new URL(location.href);
-  u.searchParams.set("id", riotIdInput.value.trim());
-  u.searchParams.set("range", rangeSelect?.value || "all");
-  navigator.clipboard.writeText(u.toString()).then(()=>{
-    status("Link copied.");
-    setTimeout(()=>status(""), 1200);
-  });
-}
-function exportCSV() {
-  const list = baseFilteredList();
-  if (!list.length) { status("Nothing to export."); return; }
-  const header = ["matchId","gameStart","championName","placement","kills","deaths","assists"];
-  const rows = list.map(m => [
-    m.matchId,
-    new Date(m.gameStart).toISOString(),
-    m.championName,
-    m.placement,
-    m.kills,
-    m.deaths,
-    m.assists
-  ]);
-  const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], {type:"text/csv"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `arena_${CURRENT_PLAYER_TAG.replace(/[#\s]/g,"_")}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+
+// Modal loader
+async function openMatchModal(matchId) {
+  try {
+    status("Loading match...");
+    const match = await fetchJSON(`${API_BASE}/match?id=${encodeURIComponent(matchId)}`);
+    renderMatchModal(match);
+    overlay.hidden = false;
+    status("");
+  } catch (e) {
+    console.error(e);
+    status(e.message || "Failed to load match");
+  }
 }
 
-// kick off
+// Kick off
 prefillFromURL();
