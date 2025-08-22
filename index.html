@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Arena.gg</title>
-  <link rel="stylesheet" href="styles.css?v=build7">
+  <link id="css" rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="topbar">
@@ -42,7 +42,6 @@
         <div class="section-title">
           <h3>Placements</h3><small class="muted">last N games</small>
         </div>
-        <!-- narrower canvas so it visually matches the sidebar cards -->
         <canvas id="placements-canvas" width="260" height="220"></canvas>
       </section>
 
@@ -51,13 +50,10 @@
 
     <!-- Right content -->
     <section class="content">
-      <!-- OVERVIEW -->
       <div id="tab-overview" class="tab active">
         <section class="kpis card" id="kpis"></section>
-        <!-- Removed Recent performance block per your request -->
       </div>
 
-      <!-- HISTORY -->
       <div id="tab-history" class="tab">
         <div class="filters segmented">
           <button data-filter="all" class="active">All</button>
@@ -71,7 +67,6 @@
         </div>
       </div>
 
-      <!-- SYNERGY -->
       <div id="tab-synergy" class="tab">
         <section class="card">
           <h3>Duo synergies (your ally pair)</h3>
@@ -90,7 +85,6 @@
         </section>
       </div>
 
-      <!-- TIER LIST -->
       <div id="tab-tierlist" class="tab">
         <section class="card">
           <div class="tierbar">
@@ -105,9 +99,7 @@
             </div>
           </div>
 
-          <div id="tier-board" class="tierboard">
-            <!-- built in JS -->
-          </div>
+          <div id="tier-board" class="tierboard"></div>
         </section>
       </div>
     </section>
@@ -117,6 +109,11 @@
     <div class="container muted">Powered by Riot Games API, icons by Data Dragon. Made by @renas2g</div>
   </footer>
 
-  <script type="module" src="app.js?v=build7"></script>
+  <!-- Auto cache-bust loader -->
+  <script type="module">
+    const ver = new Date(document.lastModified).getTime();
+    document.getElementById("css").href = `styles.css?v=${ver}`;
+    import(`./app.js?v=${ver}`);
+  </script>
 </body>
 </html>
