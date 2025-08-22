@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Arena.gg</title>
+  <!-- IMPORTANT: id="css" so the loader can swap the href with ?v=... -->
   <link id="css" rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -25,7 +26,6 @@
   </header>
 
   <main class="container layout">
-    <!-- Left sidebar -->
     <aside class="sidebar">
       <section class="card">
         <h3>Wins checklist</h3>
@@ -48,7 +48,6 @@
       <div class="muted small" id="last-updated"></div>
     </aside>
 
-    <!-- Right content -->
     <section class="content">
       <div id="tab-overview" class="tab active">
         <section class="kpis card" id="kpis"></section>
@@ -60,7 +59,6 @@
           <button data-filter="wins">1st place</button>
           <button data-filter="neverwon">Never won</button>
         </div>
-
         <section id="matches" class="grid"></section>
         <div id="more" class="more">
           <button id="btn-more" class="ghost">Load 100 more</button>
@@ -98,7 +96,6 @@
               <button id="tier-import" class="ghost">Import</button>
             </div>
           </div>
-
           <div id="tier-board" class="tierboard"></div>
         </section>
       </div>
@@ -109,10 +106,13 @@
     <div class="container muted">Powered by Riot Games API, icons by Data Dragon. Made by @renas2g</div>
   </footer>
 
-  <!-- Auto cache-bust loader -->
+  <!-- Auto cache-bust loader (CSS + JS) -->
   <script type="module">
     const ver = new Date(document.lastModified).getTime();
-    document.getElementById("css").href = `styles.css?v=${ver}`;
+    // ensure CSS is replaced with busted URL
+    const css = document.getElementById('css');
+    if (css) css.href = `styles.css?v=${ver}`;
+    // load JS with the same version
     import(`./app.js?v=${ver}`);
   </script>
 </body>
