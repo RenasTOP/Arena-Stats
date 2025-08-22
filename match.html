@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Arena.gg — Match</title>
-  <link rel="stylesheet" href="styles.css?v=build6" />
+  <link id="css" rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="topbar">
@@ -22,7 +22,8 @@
         <table class="table" id="match-table">
           <thead>
             <tr>
-              <th>Champion</th><th>Place</th><th>K / D / A</th><th>Gold</th><th>Damage</th><th>Items</th><th>Augments</th>
+              <th>Champion</th><th>Place</th><th>K / D / A</th>
+              <th>Gold</th><th>Damage</th><th>Items</th><th>Augments</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -35,6 +36,11 @@
     <div class="container muted">Powered by Riot Games API • @renas2g</div>
   </footer>
 
-  <script type="module" src="match.js?v=build6"></script>
+  <!-- Auto cache-bust loader -->
+  <script type="module">
+    const ver = new Date(document.lastModified).getTime();
+    document.getElementById("css").href = `styles.css?v=${ver}`;
+    import(`./match.js?v=${ver}`);
+  </script>
 </body>
 </html>
