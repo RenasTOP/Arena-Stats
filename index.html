@@ -23,16 +23,31 @@
   </main>
 
   <script>
-  document.getElementById('home-search').addEventListener('submit', (e)=>{
-    e.preventDefault();
-    const region = document.getElementById('home-region').value;
-    const id = document.getElementById('home-riotid').value.trim();
-    if(!id.includes('#')) { alert('Use Name#TAG'); return; }
-    const url = new URL('./app.html', location.href);
-    url.searchParams.set('id', id);
-    url.searchParams.set('region', region);
-    location.href = url.toString();
-  });
+  (function(){
+    // Se a homepage for aberta com ?id= e ?region=, redireciona logo para app.html
+    const u = new URL(location.href);
+    const id = u.searchParams.get('id');
+    const region = u.searchParams.get('region');
+    if (id && id.includes('#')) {
+      const url = new URL('./app.html', location.href);
+      url.searchParams.set('id', id);
+      if (region) url.searchParams.set('region', region);
+      location.replace(url.toString());
+      return;
+    }
+
+    // Pesquisa normal a partir do formulário
+    document.getElementById('home-search').addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const region = document.getElementById('home-region').value;
+      const id = document.getElementById('home-riotid').value.trim();
+      if(!id.includes('#')) { alert('Use Name#TAG'); return; }
+      const url = new URL('./app.html', location.href);
+      url.searchParams.set('id', id);
+      url.searchParams.set('region', region);
+      location.href = url.toString();
+    });
+  })();
   </script>
 </body>
 </html>
