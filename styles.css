@@ -1,118 +1,86 @@
-/* ========== Base ========== */
-* { box-sizing: border-box; }
+/* ===== Base ===== */
+*{box-sizing:border-box}
 :root{
   --bg:#0f1216; --panel:#0f141b; --panel-2:#111824;
-  --text:#e6edf3; --muted:#9aa4ad;
-  --border:#2d333b; --green:#238636; --red:#b33a3a;
-  --gold:#f4d03f; --silver:#c0c7cf; --bronze:#d58a3a; --chip:#1b2330;
+  --text:#e6edf3; --muted:#9aa4ad; --border:#2d333b;
+  --green:#238636; --red:#b33a3a;
+  /* match-card badge colors */
+  --p1:#1f3c1f; --p1text:#a9e6b0;
+  --p2:#1c2a4a; --p2text:#a9c8ff;
+  --p3:#3a2a1a; --p3text:#f2c69a;
+  --px:#2a2a2a; --pxtext:#cfcfcf;
 }
 html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,"Noto Sans",sans-serif}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
 .container{max-width:1200px;margin:0 auto;padding:0 16px}
 
-/* ========== Topbar ========== */
+/* ===== Topbar ===== */
 .topbar{position:sticky;top:0;z-index:50;background:#0e131a;border-bottom:1px solid var(--border)}
 .topbar .container{display:flex;align-items:center;gap:12px;padding:10px 0}
 .brand{margin:0;font-size:1.35rem;font-weight:800;letter-spacing:.2px}
 .tabs{display:flex;gap:8px}
-.tabs button{
-  background:#202736;border:1px solid var(--border);color:var(--text);
-  padding:8px 12px;border-radius:10px;cursor:pointer;transition:.15s;
-}
+.tabs button{background:#202736;border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer;transition:.15s}
 .tabs button.active{background:var(--green);color:#fff}
 .search{display:flex;gap:8px;margin-left:auto}
-.search input{
-  padding:10px 12px;border-radius:10px;border:1px solid var(--border);
-  background:#161b22;color:var(--text);width:240px;
-}
-.search button{
-  padding:10px 14px;border-radius:10px;border:0;background:var(--green);
-  color:#fff;cursor:pointer;transition:.15s;
-}
+.search input{padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#161b22;color:var(--text);width:240px}
+.search button{padding:10px 14px;border-radius:10px;border:0;background:var(--green);color:#fff;cursor:pointer}
 button.ghost{background:#202736;border:1px solid var(--border);color:var(--text)}
 button.red{border-color:#5a1e1e;color:#ffb3b3}
 
-/* ========== Layout ========== */
-.layout{
-  display:grid; grid-template-columns:320px 1fr; gap:14px; margin:16px auto;
-}
+/* ===== Layout ===== */
+.layout{display:grid;grid-template-columns:320px 1fr;gap:14px;margin:16px auto}
 .sidebar .card{margin-bottom:12px}
-.card{
-  background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px;
-}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px}
 .section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
 .muted{color:var(--muted)} .small{font-size:.92rem}
 
-/* ========== KPIs ========== */
+/* ===== KPIs ===== */
 .kpis{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:10px}
 .kpis .tile{border:1px solid var(--border);background:#0e131a;border-radius:12px;padding:12px}
 .kpis .big{font-size:1.55rem;font-weight:800}
 
-/* ========== Filters (segmented) ========== */
-.filters.segmented{
-  display:inline-flex;gap:0;background:#0e131a;border:1px solid var(--border);
-  border-radius:999px;padding:4px;margin-bottom:10px;
-}
-.filters.segmented button{
-  border:0;background:transparent;color:var(--muted);padding:6px 12px;border-radius:999px;cursor:pointer;transition:.15s;
-}
+/* ===== Filters (segmented) ===== */
+.filters.segmented{display:inline-flex;gap:0;background:#0e131a;border:1px solid var(--border);border-radius:999px;padding:4px;margin-bottom:10px}
+.filters.segmented button{border:0;background:transparent;color:var(--muted);padding:6px 12px;border-radius:999px;cursor:pointer;transition:.15s}
 .filters.segmented button:hover{color:#d7dee5}
 .filters.segmented button.active{background:var(--green);color:#fff}
 
-/* ========== Checklist & tags ========== */
-.checklist{
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(36px,1fr));gap:8px;margin-top:6px;
-}
-.checklist .check{position:relative;width:36px;height:36px;border-radius:8px;border:1px solid var(--border);overflow:hidden;background:#0b1118}
-.checklist .check img{width:100%;height:100%;object-fit:cover}
-.checklist .tick{
-  position:absolute;right:-4px;bottom:-4px;width:16px;height:16px;border-radius:50%;
-  display:grid;place-items:center;background:var(--green);color:#fff;font-size:12px;border:1px solid var(--border)
-}
+/* ===== Checklist & tags ===== */
+.checklist{display:grid;grid-template-columns:repeat(auto-fill,minmax(36px,1fr));gap:8px;margin-top:6px}
+.check{position:relative;width:36px;height:36px;border-radius:8px;border:1px solid var(--border);overflow:hidden;background:#0b1118}
+.check img{width:100%;height:100%;object-fit:cover}
+.tick{position:absolute;right:-4px;bottom:-4px;width:16px;height:16px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:#fff;font-size:12px;border:1px solid var(--border)}
 .tags{display:flex;flex-wrap:wrap;gap:6px}
 .tag{display:inline-flex;align-items:center;gap:6px;background:#0e131a;border:1px solid var(--border);border-radius:999px;padding:4px 10px}
 
-/* ========== Grid list (matches) ========== */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
-.item{
-  background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:12px;
-  display:grid;grid-template-columns:44px 1fr;gap:10px;cursor:pointer;transition:transform .08s ease, background .12s ease;
-}
+/* ===== Match grid ===== */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.item{background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:12px;display:grid;grid-template-columns:44px 1fr;gap:10px;cursor:pointer;transition:transform .08s ease, background .12s ease}
 .item:hover{transform:translateY(-1px);background:#121823}
 .icon{width:44px;height:44px;border-radius:10px;overflow:hidden;border:1px solid var(--border)}
 .icon img{width:100%;height:100%;object-fit:cover}
 .head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--border);font-size:.85rem}
-.badge.p1{background:#1f3c1f;color:#a9e6b0}
-.badge.p2{background:#1c2a4a;color:#a9c8ff}
-.badge.p3{background:#3a2a1a;color:#f2c69a}
-.badge.px{background:#2a2a2a;color:#cfcfcf}
+.badge.p1{background:var(--p1);color:var(--p1text)}
+.badge.p2{background:var(--p2);color:var(--p2text)}
+.badge.p3{background:var(--p3);color:var(--p3text)}
+.badge.px{background:var(--px);color:var(--pxtext)}
 .more{display:flex;justify-content:center;margin:14px 0}
 
-/* ========== Table (synergy) ========== */
+/* ===== Tables ===== */
 .table{width:100%;border-collapse:collapse;font-size:.95rem}
 .table th,.table td{border-bottom:1px solid var(--border);padding:8px 6px;text-align:left}
 .row{display:flex;align-items:center;gap:8px}
 
-/* ========== Tier list ========== */
-.tierboard{display:grid;gap:10px}
-.tierrow{display:grid;grid-template-columns:80px 1fr;gap:10px;align-items:flex-start}
-.tierlabel{font-weight:700;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:#0e131a;text-align:center}
-.tierlane{min-height:64px;border:1px dashed #3a4250;border-radius:12px;padding:8px;display:flex;flex-wrap:wrap;gap:8px}
-.tierlane.edit{background:#0c1118}
-.tierbar{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}
-.draggable{width:40px;height:40px;border-radius:8px;border:1px solid var(--border);overflow:hidden;background:#0b1118;cursor:grab}
-.draggable img{width:100%;height:100%;object-fit:cover}
-
-/* ========== Placements canvas ========== */
+/* ===== Canvas ===== */
 canvas{max-width:100%;height:auto}
 #placements-canvas{background:#0b1118;border:1px solid var(--border);border-radius:10px}
 
-/* ========== Footer ========== */
+/* ===== Footer ===== */
 .footer{border-top:1px solid var(--border);margin-top:20px}
 .footer .container{padding:14px 0}
 
-/* ========== Responsive ========== */
+/* ===== Responsive ===== */
 @media (max-width: 980px){
   .layout{grid-template-columns:1fr}
   .kpis{grid-template-columns:repeat(2,1fr)}
