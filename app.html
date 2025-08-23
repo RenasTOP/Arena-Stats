@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LeagueArena.gg — Profile</title>
-  <link rel="stylesheet" href="styles.css?v=build8" />
+  <link rel="stylesheet" href="styles.css?v=build9" />
 </head>
 <body>
   <header class="topbar">
@@ -28,16 +28,12 @@
     </div>
   </header>
 
-  <!-- Global status + progress -->
   <div class="progress-wrap container" id="progress-wrap" hidden>
-    <div class="progress-line">
-      <div class="progress-bar" id="progress-bar" style="width:0%"></div>
-    </div>
+    <div class="progress-line"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
     <div class="progress-text" id="progress-text">Preparing…</div>
   </div>
 
   <main class="container layout">
-    <!-- Left sidebar -->
     <aside class="sidebar">
       <section class="card">
         <h3>Wins checklist</h3>
@@ -60,9 +56,7 @@
       <div class="muted small" id="last-updated"></div>
     </aside>
 
-    <!-- Right content -->
     <section class="content">
-      <!-- MATCHES (Overview + History together) -->
       <div id="tab-matches" class="tab active">
         <section class="kpis card" id="kpis"></section>
 
@@ -80,26 +74,18 @@
         <section id="matches" class="grid"></section>
       </div>
 
-      <!-- SYNERGY (by ally champion) -->
       <div id="tab-synergy" class="tab">
         <section class="card">
           <h3>Duo synergies (your ally pair)</h3>
           <table class="table" id="synergy-table">
             <thead>
-              <tr>
-                <th>Ally champion</th>
-                <th>Games</th>
-                <th>Wins</th>
-                <th>Win %</th>
-                <th>Avg place</th>
-              </tr>
+              <tr><th>Ally champion</th><th>Games</th><th>Wins</th><th>Win %</th><th>Avg place</th></tr>
             </thead>
             <tbody></tbody>
           </table>
         </section>
       </div>
 
-      <!-- DUOS (by player) -->
       <div id="tab-duos" class="tab">
         <section class="card">
           <div class="duo-cards">
@@ -117,13 +103,7 @@
           <h3>Best Duo Partners</h3>
           <table class="table" id="duo-table">
             <thead>
-              <tr>
-                <th>Player</th>
-                <th>Games</th>
-                <th>Wins</th>
-                <th>Win %</th>
-                <th>Avg place</th>
-              </tr>
+              <tr><th>Player</th><th>Games</th><th>Wins</th><th>Win %</th><th>Avg place</th></tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -136,6 +116,6 @@
     <div class="container muted">Powered by Riot Games API • Icons by Data Dragon</div>
   </footer>
 
-  <script type="module" src="app.js?v=build8"></script>
+  <script type="module" src="app.js?v=build9"></script>
 </body>
 </html>
