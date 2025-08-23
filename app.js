@@ -21,10 +21,12 @@ const tabViews = {
 };
 const form = document.getElementById("search-form");
 const riotIdInput = document.getElementById("riotid");
+const regionSelect = document.getElementById("region-select");
 const btnUpdate = document.getElementById("btn-update");
 const kpisBox = document.getElementById("kpis");
 const matchesBox = document.getElementById("matches");
 const btnMore = document.getElementById("btn-more");
+const champSelect = document.getElementById("champ-select");
 const winsChecklist = document.getElementById("wins-checklist");
 const hardestList = document.getElementById("hardest-list");
 const placementsCanvas = document.getElementById("placements-canvas");
@@ -32,6 +34,8 @@ const placementsRange = document.getElementById("placements-range");
 const lastUpdatedEl = document.getElementById("last-updated");
 const filters = document.querySelector("#tab-history .filters");
 const synergyTableBody = document.querySelector("#synergy-table tbody");
+const bestDuoEl = document.getElementById("best-duo").querySelector(".duo-value");
+const commonDuoEl = document.getElementById("common-duo").querySelector(".duo-value");
 const statusBox = createStatus();
 
 // ---- State ----
@@ -45,6 +49,7 @@ let CURRENT = {
   ids: [],
   nextStart: 0,
   filter: "all",
+  champFilter: "__all__",
   lastUpdated: null,
 };
 const cacheKey = (puuid)=>`arena_cache_v1:${puuid}`;
@@ -62,6 +67,10 @@ filters.addEventListener("click", (e)=>{
   [...filters.children].forEach(b=>b.classList.remove("active"));
   btn.classList.add("active");
   CURRENT.filter = btn.dataset.filter;
+  renderHistory();
+});
+champSelect.addEventListener("change", ()=>{
+  CURRENT.champFilter = champSelect.value || "__all__";
   renderHistory();
 });
 
@@ -125,8 +134,13 @@ async function onSearch(e){
       Object.assign(CURRENT, { matches: [], ids: [], nextStart: 0, region: null, lastUpdated: null });
     }
 
-    const reg = await fetchJSON(api(`/region?puuid=${encodeURIComponent(CURRENT.puuid)}`));
-    CURRENT.region = reg.region;
+    // Auto region unless user overrides UI with a specific region
+    if (regionSelect.value === "auto") {
+      const reg = await fetchJSON(api(`/region?puuid=${encodeURIComponent(CURRENT.puuid)}`));
+      CURRENT.region = reg.region;
+    } else {
+      CURRENT.region = regionSelect.value;
+    }
 
     await refresh(true);
   } catch(err){ console.error(err); status(err.message || "Error"); }
@@ -148,6 +162,7 @@ async function refresh(full){
     const payload = { matches: CURRENT.matches, ids: CURRENT.ids, nextStart: CURRENT.nextStart, region: CURRENT.region, updatedAt: Date.now() };
     saveCache(CURRENT.puuid, payload); setLastUpdated(payload.updatedAt);
 
+    populateChampionFilter();
     renderAll(); status("");
   } catch(err){ console.error(err); status(err.message || "Refresh failed"); }
 }
@@ -166,6 +181,7 @@ async function loadMore(){
 
     saveCache(CURRENT.puuid, { matches: CURRENT.matches, ids: CURRENT.ids, nextStart: CURRENT.nextStart, region: CURRENT.region, updatedAt: Date.now() });
 
+    populateChampionFilter();
     renderAll(); status("");
   } catch(err){ console.error(err); status(err.message || "Load failed"); }
 }
@@ -235,12 +251,18 @@ function renderSidebar(){
 
 function renderHistory(forcedList){
   const listAll = (forcedList || CURRENT.matches).slice();
+
+  // base filter
   let list = listAll;
   if (CURRENT.filter === "wins") list = listAll.filter(m=>m.placement===1);
   else if (CURRENT.filter === "neverwon") {
     const prog = buildProgress(CURRENT.matches);
     const lostSet = new Set(Object.values(prog).filter(p=>!p.completed).map(p=>p.name));
     list = listAll.filter(m=>lostSet.has(m.championName));
+  }
+  // champion filter
+  if (CURRENT.champFilter !== "__all__") {
+    list = list.filter(m => m.championName === CURRENT.champFilter);
   }
 
   matchesBox.innerHTML = list.map(m=>{
@@ -268,16 +290,32 @@ function renderSynergy(){
   }
   const rows = Object.values(agg)
     .filter(x=>x.ally!=="Unknown")
-    .sort((a,b)=> (b.wins/b.games) - (a.wins/a.games))
-    .map(x=>{
-      const wr = x.games ? Math.round((100*x.wins)/x.games) : 0;
-      const avg = x.games ? (x.sumPlace/x.games).toFixed(2) : "—";
-      return `<tr>
-        <td class="row"><img src="${champIcon(x.ally)}" width="22" height="22" style="border-radius:6px;border:1px solid var(--border)"> ${x.ally}</td>
-        <td>${x.games}</td><td>${x.wins}</td><td>${wr}%</td><td>${avg}</td>
-      </tr>`;
-    }).join("");
-  synergyTableBody.innerHTML = rows || `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
+    .map(x=>({ ...x, wr: x.games ? Math.round((100*x.wins)/x.games) : 0, avg: x.games ? (x.sumPlace/x.games).toFixed(2) : "—" }));
+
+  // KPIs
+  const enough = rows.filter(x => x.games >= 5);
+  const best = enough.sort((a,b)=> b.wr - a.wr || b.games - a.games)[0];
+  const common = rows.slice().sort((a,b)=> b.games - a.games)[0];
+
+  bestDuoEl.innerHTML = best
+    ? `<img src="${champIcon(best.ally)}" alt="${best.ally}">${best.ally} • ${best.wr}% WR (${best.games} games)`
+    : `<span class="muted">Not enough games yet</span>`;
+
+  commonDuoEl.innerHTML = common
+    ? `<img src="${champIcon(common.ally)}" alt="${common.ally}">${common.ally} • ${common.games} games`
+    : `<span class="muted">No duo games yet</span>`;
+
+  // Table
+  synergyTableBody.innerHTML = rows.length
+    ? rows
+        .sort((a,b)=> b.wr - a.wr) /* winrate desc */
+        .map(x=>`
+          <tr>
+            <td class="row"><img src="${champIcon(x.ally)}" width="22" height="22" style="border-radius:6px;border:1px solid var(--border)"> ${x.ally}</td>
+            <td>${x.games}</td><td>${x.wins}</td><td>${x.wr}%</td><td>${x.avg}</td>
+          </tr>
+        `).join("")
+    : `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
 }
 
 // ---- Progress, Charts, Utils ----
@@ -293,6 +331,14 @@ function buildProgress(matches){
     out[name] = { name, completed, attemptsUntilFirst, attemptsSoFar: asc.length, when };
   }
   return out;
+}
+function populateChampionFilter(){
+  const set = new Set(CURRENT.matches.map(m=>m.championName));
+  const curr = CURRENT.champFilter;
+  champSelect.innerHTML = `<option value="__all__">All champions</option>` +
+    [...set].sort((a,b)=>a.localeCompare(b))
+      .map(c=>`<option value="${c}">${c}</option>`).join("");
+  champSelect.value = set.has(curr) ? curr : "__all__";
 }
 function groupBy(list, fn){ const map={}; for(const x of list){ const k=fn(x); (map[k] ||= []).push(x); } return map; }
 function tile(big,label){ return `<div class="tile"><div class="big">${big}</div><div class="label muted">${label}</div></div>`; }
