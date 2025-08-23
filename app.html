@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>LeagueArena.gg — Profile</title>
-  <link rel="stylesheet" href="styles.css?v=build9" />
+  <title>LeagueArena.gg, Profile</title>
+  <link rel="stylesheet" href="styles.css?v=build10" />
 </head>
 <body>
   <header class="topbar">
@@ -30,10 +30,11 @@
 
   <div class="progress-wrap container" id="progress-wrap" hidden>
     <div class="progress-line"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
-    <div class="progress-text" id="progress-text">Preparing…</div>
+    <div class="progress-text" id="progress-text">Preparing...</div>
   </div>
 
-  <main class="container layout">
+  <!-- Agora o layout começa oculto e só aparece quando terminar o fetch completo -->
+  <main class="container layout" id="main-layout" hidden>
     <aside class="sidebar">
       <section class="card">
         <h3>Wins checklist</h3>
@@ -65,7 +66,7 @@
           <button data-filter="wins">1st place</button>
           <button data-filter="neverwon">Never won</button>
           <div class="champ-filter">
-            <input id="champ-input" list="champ-datalist" placeholder="Filter by champion…" />
+            <input id="champ-input" list="champ-datalist" placeholder="Filter by champion..." />
             <datalist id="champ-datalist"></datalist>
             <button id="champ-clear" class="ghost sm">Clear</button>
           </div>
@@ -91,11 +92,11 @@
           <div class="duo-cards">
             <div class="duo-card" id="best-duo">
               <div class="duo-label">Best duo (≥5 games)</div>
-              <div class="duo-value muted">—</div>
+              <div class="duo-value muted">...</div>
             </div>
             <div class="duo-card" id="common-duo">
               <div class="duo-label">Most common duo</div>
-              <div class="duo-value muted">—</div>
+              <div class="duo-value muted">...</div>
             </div>
           </div>
         </section>
@@ -113,9 +114,9 @@
   </main>
 
   <footer class="footer">
-    <div class="container muted">Powered by Riot Games API • Icons by Data Dragon</div>
+    <div class="container muted">Powered by Riot Games API, Icons by Data Dragon</div>
   </footer>
 
-  <script type="module" src="app.js?v=build9"></script>
+  <script type="module" src="app.js?v=build10"></script>
 </body>
 </html>
