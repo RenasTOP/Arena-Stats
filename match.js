@@ -1,12 +1,12 @@
-// Match details — LoG-style cards + LIVE augment names/icons via CommunityDragon (no json to maintain)
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
+// Match details, estilo LoG com nomes clicáveis para o app.html e augments vindos do CommunityDragon
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // sem slash final
 
 // --- Params ---
 const params = new URLSearchParams(location.search);
 const matchId = params.get("id");
 const focusPuuid = params.get("puuid");
-const routingRegion = params.get("region") || ""; // americas/europe
-let uiRegion = params.get("regionUI") || "";      // NA/EUW/EUNE for links
+const routingRegion = params.get("region") || ""; // americas ou europe
+let uiRegion = params.get("regionUI") || "";      // NA, EUW, EUNE, etc
 
 // --- DOM ---
 const backLink = document.getElementById("back-link");
@@ -14,7 +14,7 @@ const card = document.getElementById("match-card");
 const teamsWrap = document.getElementById("teams");
 const tbody = document.querySelector("#match-table tbody");
 
-// --- DDragon (items/champs) ---
+// --- DDragon, items e champs ---
 let DD_VERSION = "15.16.1";
 const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Khazix", VelKoz:"Velkoz", ChoGath:"Chogath", KaiSa:"Kaisa", LeBlanc:"Leblanc", DrMundo:"DrMundo", Nunu:"Nunu", Renata:"Renata", RekSai:"RekSai", KogMaw:"KogMaw", BelVeth:"Belveth", TahmKench:"TahmKench" };
 const ITEM_DB = { byId:{} };
@@ -38,17 +38,11 @@ async function initDDragon(){
 const CDRAGON_BASE = "https://raw.communitydragon.org/latest";
 const AUG_DB = { byId: new Map(), byKey: new Map() };
 
-/**
- * We try a few well-known CDragon endpoints for Arena augments.
- * If an endpoint changes, the others still make this robust.
- */
+// Tenta várias fontes conhecidas de augments
 async function loadAugmentsFromCDragon(){
   const candidates = [
-    // Most accurate for Arena augments (preferred):
     `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/arena-augments.json`,
-    // Older / backup datasets people mirror:
     `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/augments.json`,
-    // Runes (in case some augments come through as rune-like keys):
     `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/perks.json`
   ];
 
@@ -63,10 +57,11 @@ async function loadAugmentsFromCDragon(){
 }
 
 function ingestAugments(data){
-  // We accept either Array or Object maps; try to be flexible with field names.
   const arr = Array.isArray(data) ? data : Object.values(data || {});
   for (const a of arr){
-    const id   = a.id ?? a.augmentId ?? a.gameModifierId ?? null;
+    let id = a.id ?? a.augmentId ?? a.gameModifierId ?? null;
+    if (typeof id === "string" && /^\d+$/.test(id)) id = Number(id); // normaliza ids string numéricas
+
     const key  = a.nameId ?? a.tftId ?? a.apiName ?? a.inventoryIcon ?? a.icon ?? a.contentId ?? null;
     const name = a.name ?? a.localizedName ?? a.displayName ?? a.title ?? null;
     const desc = a.desc ?? a.tooltip ?? a.description ?? a.longDesc ?? null;
@@ -90,20 +85,15 @@ function prettifyAugString(raw){
 function lookupAug(raw){
   if (raw == null) return null;
 
-  // Numeric id
   const asNum = Number(raw);
   if (Number.isFinite(asNum) && AUG_DB.byId.size){
     const rec = AUG_DB.byId.get(asNum);
     if (rec) return rec;
   }
-
-  // Exact key
   if (AUG_DB.byKey.size){
     const rec = AUG_DB.byKey.get(String(raw));
     if (rec) return rec;
   }
-
-  // Fallback: prettify string token
   return { name: typeof raw === "string" ? prettifyAugString(raw) : `Augment #${raw}` };
 }
 
@@ -120,12 +110,11 @@ function secondsToMin(s){ if (!Number.isFinite(s)) return "—"; const m=Math.fl
 function routingToUI(r){ const v=(r||"").toLowerCase(); if (v==="americas") return "NA"; return "EUW"; }
 function linkToProfile(nameTag, uiRegionGuess){
   const base = new URL(location.href.replace(/[^/]*$/, ""));
-  const url = new URL("app.html", base);
+  const url = new URL("app.html", base); // agora abre diretamente o app
   url.searchParams.set("id", nameTag);
   if (uiRegionGuess) url.searchParams.set("region", uiRegionGuess.toUpperCase());
   return url.toString();
 }
-
 function makeNameTag(p){ return (p.riotIdGameName && p.riotIdTagline) ? `${p.riotIdGameName}#${p.riotIdTagline}` : (p.summonerName || "Unknown"); }
 
 function normPlace(p){ return p.placement ?? p.challenges?.arenaPlacement ?? 99; }
@@ -177,6 +166,9 @@ function renderTeams(match, focusId){
   teamsWrap.innerHTML = pairs.map(team=>{
     const place = team.length ? normPlace(team[0]) : 99;
     const colorCls = teamColorClass(place);
+    const containsFocus = focusId && team.some(t=>t.puuid === focusId);
+    const allyId = containsFocus ? team.find(t=>t.puuid !== focusId)?.puuid : null;
+
     return `
       <div class="team-card ${colorCls}">
         <div class="team-head">
@@ -185,6 +177,7 @@ function renderTeams(match, focusId){
         <div class="team-body">
           ${team.map(p=>{
             const you  = p.puuid === focusId;
+            const isAlly = !you && allyId && p.puuid === allyId;
             const tag  = makeNameTag(p);
             const href = linkToProfile(tag, uiRegion || routingToUI(routingRegion));
 
@@ -192,7 +185,7 @@ function renderTeams(match, focusId){
               .filter(Boolean)
               .map(a => {
                 const rec = lookupAug(a);
-                const title = [rec.name, rec.desc].filter(Boolean).join(" — ");
+                const title = [rec.name, rec.desc].filter(Boolean).join(" , ");
                 const icon = rec.icon ? `<img class="aug-ico" src="${rec.icon}" alt="${rec.name}" title="${title}">` : "";
                 return icon ? icon : `<span class="badge sm" title="${title}">${rec.name}</span>`;
               }).join("");
@@ -202,7 +195,7 @@ function renderTeams(match, focusId){
               .map(id => `<img src="${itemIcon(id)}" alt="${id}" title="${itemName(id)}">`).join("");
 
             return `
-              <a class="player ${you?'me':''}" href="${href}">
+              <a class="player ${you?'me':(isAlly?'ally':'')}" href="${href}">
                 <div class="row">
                   <img class="champ-ico" src="${champIcon(p.championName)}" alt="${p.championName}">
                   <div class="col">
@@ -242,7 +235,7 @@ function renderTable(match, focusId){
       .filter(Boolean)
       .map(a => {
         const rec = lookupAug(a);
-        const title = [rec.name, rec.desc].filter(Boolean).join(" — ");
+        const title = [rec.name, rec.desc].filter(Boolean).join(" , ");
         return rec.icon
           ? `<img class="aug-ico" src="${rec.icon}" alt="${rec.name}" title="${title}">`
           : `<span class="badge sm" title="${title}">${rec.name}</span>`;
@@ -272,7 +265,7 @@ function renderTable(match, focusId){
   }
   if (!uiRegion) uiRegion = routingToUI(routingRegion);
 
-  // back link keeps region
+  // botão Back mantém a região
   const back = new URL(location.href.replace(/[^/]*$/, ""));
   back.searchParams.set("region", uiRegion);
   backLink.href = back.toString();
