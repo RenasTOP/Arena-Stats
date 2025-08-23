@@ -4,7 +4,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Arena.gg</title>
-  <!-- IMPORTANT: id="css" so the loader can swap the href with ?v=... -->
   <link id="css" rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -15,7 +14,6 @@
         <button data-tab="overview" class="active">Overview</button>
         <button data-tab="history">History</button>
         <button data-tab="synergy">Duo Synergies</button>
-        <button data-tab="tierlist">Tier List</button>
       </nav>
       <form id="search-form" class="search">
         <input id="riotid" placeholder="Riot ID (Name#TAG)" />
@@ -26,6 +24,7 @@
   </header>
 
   <main class="container layout">
+    <!-- Left sidebar -->
     <aside class="sidebar">
       <section class="card">
         <h3>Wins checklist</h3>
@@ -40,7 +39,8 @@
 
       <section class="card">
         <div class="section-title">
-          <h3>Placements</h3><small class="muted">last N games</small>
+          <h3>Placements</h3>
+          <small class="muted" id="placements-range">last 0 games</small>
         </div>
         <canvas id="placements-canvas" width="260" height="220"></canvas>
       </section>
@@ -48,23 +48,28 @@
       <div class="muted small" id="last-updated"></div>
     </aside>
 
+    <!-- Right content -->
     <section class="content">
+      <!-- OVERVIEW -->
       <div id="tab-overview" class="tab active">
         <section class="kpis card" id="kpis"></section>
       </div>
 
+      <!-- HISTORY -->
       <div id="tab-history" class="tab">
         <div class="filters segmented">
           <button data-filter="all" class="active">All</button>
           <button data-filter="wins">1st place</button>
           <button data-filter="neverwon">Never won</button>
         </div>
+
         <section id="matches" class="grid"></section>
         <div id="more" class="more">
           <button id="btn-more" class="ghost">Load 100 more</button>
         </div>
       </div>
 
+      <!-- SYNERGY -->
       <div id="tab-synergy" class="tab">
         <section class="card">
           <h3>Duo synergies (your ally pair)</h3>
@@ -82,23 +87,6 @@
           </table>
         </section>
       </div>
-
-      <div id="tab-tierlist" class="tab">
-        <section class="card">
-          <div class="tierbar">
-            <div class="left">
-              <button id="tier-edit" class="ghost">Edit</button>
-              <button id="tier-save" class="ghost">Save</button>
-              <button id="tier-reset" class="ghost red">Reset</button>
-            </div>
-            <div class="right">
-              <button id="tier-export" class="ghost">Export</button>
-              <button id="tier-import" class="ghost">Import</button>
-            </div>
-          </div>
-          <div id="tier-board" class="tierboard"></div>
-        </section>
-      </div>
     </section>
   </main>
 
@@ -106,13 +94,11 @@
     <div class="container muted">Powered by Riot Games API, icons by Data Dragon. Made by @renas2g</div>
   </footer>
 
-  <!-- Auto cache-bust loader (CSS + JS) -->
+  <!-- Auto cache-bust loader -->
   <script type="module">
     const ver = new Date(document.lastModified).getTime();
-    // ensure CSS is replaced with busted URL
     const css = document.getElementById('css');
     if (css) css.href = `styles.css?v=${ver}`;
-    // load JS with the same version
     import(`./app.js?v=${ver}`);
   </script>
 </body>
