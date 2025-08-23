@@ -226,7 +226,7 @@ function renderSidebar(){
     `<span class="tag"><img src="${champIcon(p.name)}" width="16" height="16" style="border-radius:4px;border:1px solid var(--border)"> ${p.name} · ${p.attemptsUntilFirst}</span>`
   ).join("") : `<div class="muted small">No wins yet.</div>`;
 
-  // Placement chart (colors = match-card badges)
+  // Placement chart
   const counts = Array(8).fill(0);
   for (const m of CURRENT.matches){ const p=Number(m.placement); if (p>=1 && p<=8) counts[p-1]++; }
   if (placementsRange) placementsRange.textContent = `last ${CURRENT.matches.length} games`;
@@ -313,10 +313,11 @@ function drawPlacementBars(canvas, counts){
     ctx.fillStyle = "#7f8c8d"; ctx.font="12px system-ui"; ctx.fillText(String(y), 10, yy+4);
   }
 
-  // bar colors aligned with card badges
+  // bright bar colors (vivid)
   const colors = [
-    getCSS("--p1"), getCSS("--p2"), getCSS("--p3"),
-    getCSS("--px"), getCSS("--px"), getCSS("--px"), getCSS("--px"), getCSS("--px")
+    getCSS("--p1bar"), getCSS("--p2bar"), getCSS("--p3bar"),
+    getCSS("--pxbar"), getCSS("--pxbar"), getCSS("--pxbar"),
+    getCSS("--pxbar"), getCSS("--pxbar")
   ];
 
   const n = counts.length;
