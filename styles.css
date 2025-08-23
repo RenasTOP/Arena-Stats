@@ -140,3 +140,9 @@ body.home{display:grid;place-items:center;min-height:100vh;background:radial-gra
 .legend-chip.me{ background:#163320 }
 .legend-chip.ally{ background:#10252d }
 
+/* Augment icon style */
+.aug-ico{
+  width:20px; height:20px; border-radius:4px;
+  border:1px solid var(--border); margin-right:6px; vertical-align:middle;
+}
+.player .aug-ico{ margin-right:4px; }
