@@ -5,7 +5,7 @@ const ARENA_QUEUE = 1700;
 const PAGE_SIZE = 100;
 const CHUNK_SIZE = 10;
 const IDS_PAGE_DELAY = 200;
-const CACHE_VERSION = "v10";
+const CACHE_VERSION = "v10b";
 
 // ---- Storage keys para pins & recents ----
 const PIN_KEY = "arena_pins_v1";       // [{id,regionUI,ts}]
@@ -17,7 +17,7 @@ function api(pathAndQuery){
   return `${base}${path}`;
 }
 
-// ---- DOM ----
+// ---- DOM (podem ser null; tratamos disso) ----
 const tabs = document.getElementById("tabs");
 const tabViews = {
   matches: document.getElementById("tab-matches"),
@@ -80,55 +80,16 @@ let CURRENT = {
 
 const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
 
-// ---- Tabs ----
-if (tabs) {
-  tabs.addEventListener("click", (e)=>{
-    const btn = e.target.closest("button"); if (!btn) return;
-    const key = btn.dataset.tab;
-    [...tabs.querySelectorAll("button")].forEach(b=>{
-      const active = b === btn;
-      b.classList.toggle("active", active);
-      b.setAttribute("aria-selected", active ? "true" : "false");
-    });
-    for (const [k, el] of Object.entries(tabViews)) if (el) el.classList.toggle("active", k===key);
-  });
+// ---- Helpers seguros ----
+function safeRegionUI(){
+  const v = (regionSelect && regionSelect.value) ? regionSelect.value : "EUW";
+  return String(v).toUpperCase();
 }
-
-// ---- Filters ----
-filters.addEventListener("click", (e)=>{
-  const btn = e.target.closest("button"); if (!btn) return;
-  [...filters.children].forEach(b=>b.classList.remove("active"));
-  btn.classList.add("active");
-  CURRENT.filter = btn.dataset.filter;
-  renderHistory();
-});
-champInput.addEventListener("input", ()=>{ CURRENT.champQuery = (champInput.value || "").trim(); renderHistory(); });
-champClear.addEventListener("click", ()=>{ champInput.value=""; CURRENT.champQuery=""; renderHistory(); });
-
-// ---- Actions ----
-form.addEventListener("submit", onSearch);
-btnUpdate.addEventListener("click", () => refresh(true));
-btnPin.addEventListener("click", onTogglePin);
-
-matchesBox.addEventListener("click", (e)=>{
-  const card = e.target.closest(".item");
-  if (!card) return;
-  const id = card.dataset.id;
-  const base = new URL(location.href.replace(/[^/]*$/, ""));
-  const url = new URL("match.html", base);
-  url.searchParams.set("id", id);
-  url.searchParams.set("puuid", CURRENT.puuid || "");
-  url.searchParams.set("region", CURRENT.region || "");
-  url.searchParams.set("regionUI", regionSelect.value || "EUW");
-  location.href = url.toString();
-});
-
-// ---- Helpers ----
 function champIcon(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`; }
 function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "?"; return `${n}th`; }
 function timeAgo(ts){ if(!ts) return "unknown"; const s=Math.max(1,Math.floor((Date.now()-Number(ts))/1000)); const m=Math.floor(s/60); if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<48) return `${h}h ago`; const d=Math.floor(h/24); return `${d}d ago`; }
-function status(t){ statusBox.textContent = t||""; }
-function setLastUpdated(ts){ lastUpdatedEl.textContent = ts ? `Last updated, ${new Date(ts).toLocaleString()}` : ""; }
+function status(t){ if(statusBox) statusBox.textContent = t||""; }
+function setLastUpdated(ts){ if(lastUpdatedEl) lastUpdatedEl.textContent = ts ? `Last updated, ${new Date(ts).toLocaleString()}` : ""; }
 function setMainVisible(v){ if (mainLayout) mainLayout.hidden = !v; }
 
 async function fetchJSON(url, tries=3, delay=600){
@@ -146,22 +107,36 @@ function createStatus(){ const el=document.createElement("div"); el.id="status";
 function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
 
 // ---- Progress UI helpers ----
-function showIndeterminate(msg){ progressWrap.hidden=false; progressBar.classList.add('indeterminate'); progressBar.style.width='100%'; progressText.textContent=msg||'Working…'; }
-function showDeterminate(msg,pct){ progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
-function hideProgress(){ progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
+function showIndeterminate(msg){ if(!progressWrap||!progressBar||!progressText) return; progressWrap.hidden=false; progressBar.classList.add('indeterminate'); progressBar.style.width='100%'; progressText.textContent=msg||'Working…'; }
+function showDeterminate(msg,pct){ if(!progressWrap||!progressBar||!progressText) return; progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
+function hideProgress(){ if(!progressWrap||!progressBar||!progressText) return; progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
 
-// ---- URL prefill & auto-run ----
-function prefillFromURL(){
-  const u = new URL(location.href);
-  const id = u.searchParams.get('id');
-  const region = u.searchParams.get('region');
-  if (region) regionSelect.value = region.toUpperCase();
-  if (id && id.includes('#')) {
-    riotIdInput.value = id;
-    setTimeout(()=> form.dispatchEvent(new Event('submit', {cancelable:true})), 0);
-  }
-  renderQuicklists(); // mostra pins/recents mesmo sem pesquisa
+// ---- Tabs ----
+if (tabs) {
+  tabs.addEventListener("click", (e)=>{
+    const btn = e.target.closest("button"); if (!btn) return;
+    const key = btn.dataset.tab;
+    [...tabs.querySelectorAll("button")].forEach(b=>{
+      const active = b === btn;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    for (const [k, el] of Object.entries(tabViews)) if (el) el.classList.toggle("active", k===key);
+  });
 }
+
+// ---- Filters ----
+if (filters) {
+  filters.addEventListener("click", (e)=>{
+    const btn = e.target.closest("button"); if (!btn) return;
+    [...filters.children].forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    CURRENT.filter = btn.dataset.filter;
+    renderHistory();
+  });
+}
+if (champInput) champInput.addEventListener("input", ()=>{ CURRENT.champQuery = (champInput.value || "").trim(); renderHistory(); });
+if (champClear) champClear.addEventListener("click", ()=>{ if (champInput) champInput.value=""; CURRENT.champQuery=""; renderHistory(); });
 
 // ---- Pins & Recents ----
 function loadPins(){ try{ return JSON.parse(localStorage.getItem(PIN_KEY)||"[]"); }catch{ return []; } }
@@ -170,7 +145,6 @@ function loadRecents(){ try{ return JSON.parse(localStorage.getItem(RECENT_KEY)|
 function saveRecents(arr){ try{ localStorage.setItem(RECENT_KEY, JSON.stringify(arr)); }catch{} }
 
 function currentNameTag(){ return (CURRENT.gameName && CURRENT.tagLine) ? `${CURRENT.gameName}#${CURRENT.tagLine}` : null; }
-function currentRegionUI(){ return (regionSelect.value || "EUW").toUpperCase(); }
 
 function isPinned(nameTag, regionUI){
   const pins = loadPins();
@@ -178,7 +152,7 @@ function isPinned(nameTag, regionUI){
 }
 function onTogglePin(){
   const id = currentNameTag(); if (!id) return;
-  const reg = currentRegionUI();
+  const reg = safeRegionUI();
   const pins = loadPins();
   const idx = pins.findIndex(p => p.id===id && p.regionUI===reg);
   if (idx !== -1) pins.splice(idx,1); else pins.unshift({ id, regionUI: reg, ts: Date.now() });
@@ -187,9 +161,11 @@ function onTogglePin(){
   renderQuicklists();
 }
 function updatePinButton(){
-  const id = currentNameTag(); if (!id){ btnPin.disabled = true; btnPin.textContent = "☆ Pin"; return; }
+  if (!btnPin) return;
+  const id = currentNameTag();
+  if (!id){ btnPin.disabled = true; btnPin.textContent = "☆ Pin"; return; }
   btnPin.disabled = false;
-  const pinned = isPinned(id, currentRegionUI());
+  const pinned = isPinned(id, safeRegionUI());
   btnPin.textContent = pinned ? "★ Unpin" : "☆ Pin";
   btnPin.title = pinned ? "Unpin this profile" : "Pin this profile";
 }
@@ -201,32 +177,65 @@ function pushRecent(nameTag, regionUI){
   saveRecents(arr.slice(0,8));
 }
 function renderQuicklists(){
-  const pins = loadPins();
-  const recs = loadRecents();
-
-  pinsList.innerHTML = pins.length ? pins.map(x=>{
-    const url = new URL("./app.html", location.href);
-    url.searchParams.set("id", x.id);
-    url.searchParams.set("region", x.regionUI);
-    return `<a href="${url.toString()}" class="link-chip" title="${x.id} (${x.regionUI})">${x.id}</a>`;
-  }).join("") : `<div class="muted small">Sem fixos</div>`;
-
-  recentsList.innerHTML = recs.length ? recs.map(x=>{
-    const url = new URL("./app.html", location.href);
-    url.searchParams.set("id", x.id);
-    url.searchParams.set("region", x.regionUI);
-    return `<a href="${url.toString()}" class="link-chip" title="${x.id} (${x.regionUI})">${x.id}</a>`;
-  }).join("") : `<div class="muted small">Sem recentes</div>`;
+  if (pinsList) {
+    const pins = loadPins();
+    pinsList.innerHTML = pins.length ? pins.map(x=>{
+      const url = new URL("./app.html", location.href);
+      url.searchParams.set("id", x.id);
+      url.searchParams.set("region", x.regionUI);
+      return `<a href="${url.toString()}" class="link-chip" title="${x.id} (${x.regionUI})">${x.id}</a>`;
+    }).join("") : `<div class="muted small">Sem fixos</div>`;
+  }
+  if (recentsList) {
+    const recs = loadRecents();
+    recentsList.innerHTML = recs.length ? recs.map(x=>{
+      const url = new URL("./app.html", location.href);
+      url.searchParams.set("id", x.id);
+      url.searchParams.set("region", x.regionUI);
+      return `<a href="${url.toString()}" class="link-chip" title="${x.id} (${x.regionUI})">${x.id}</a>`;
+    }).join("") : `<div class="muted small">Sem recentes</div>`;
+  }
 }
 
 // ---- Cache helpers ----
 function loadCache(puuid){ try { return JSON.parse(localStorage.getItem(cacheKey(puuid))||"null"); } catch { return null; } }
 function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
 
+// ---- URL prefill & auto-run ----
+function prefillFromURL(){
+  const u = new URL(location.href);
+  const id = u.searchParams.get('id');
+  const region = u.searchParams.get('region');
+  if (region && regionSelect) regionSelect.value = region.toUpperCase();
+  if (id && riotIdInput && id.includes('#')) {
+    riotIdInput.value = id;
+    setTimeout(()=> form && form.dispatchEvent(new Event('submit', {cancelable:true})), 0);
+  }
+  renderQuicklists(); // mostra pins/recents mesmo sem pesquisa
+}
+
+// ---- Actions ----
+if (form) form.addEventListener("submit", onSearch);
+if (btnUpdate) btnUpdate.addEventListener("click", () => refresh(true));
+if (btnPin) btnPin.addEventListener("click", onTogglePin);
+
+if (matchesBox) matchesBox.addEventListener("click", (e)=>{
+  const card = e.target.closest(".item");
+  if (!card) return;
+  const id = card.dataset.id;
+  const base = new URL(location.href.replace(/[^/]*$/, ""));
+  const url = new URL("match.html", base);
+  url.searchParams.set("id", id);
+  url.searchParams.set("puuid", CURRENT.puuid || "");
+  url.searchParams.set("region", CURRENT.region || "");
+  url.searchParams.set("regionUI", safeRegionUI());
+  location.href = url.toString();
+});
+
 // ---- Search / Refresh ----
 async function onSearch(e){
   e.preventDefault();
-  const raw = riotIdInput.value.trim();
+  const raw = (riotIdInput && riotIdInput.value) ? riotIdInput.value.trim() : "";
   if (!raw.includes("#")) { alert("Use Name#TAG"); return; }
   const [gameName, tagLine] = raw.split("#");
   await initDDragon();
@@ -239,10 +248,10 @@ async function onSearch(e){
     const acc = await fetchJSON(api(`/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`));
     CURRENT.gameName = acc.gameName; CURRENT.tagLine = acc.tagLine; CURRENT.puuid = acc.puuid;
     CURRENT.matches = []; CURRENT.ids = []; CURRENT.lastUpdated = null;
-    CURRENT.region = mapRegionUItoRouting(regionSelect.value);
+    CURRENT.region = mapRegionUItoRouting(safeRegionUI());
 
     // Guardar em Recentes
-    pushRecent(`${acc.gameName}#${acc.tagLine}`, (regionSelect.value || "EUW").toUpperCase());
+    pushRecent(`${acc.gameName}#${acc.tagLine}`, safeRegionUI());
     renderQuicklists();
     updatePinButton();
 
@@ -258,7 +267,7 @@ async function refresh(){
     let allIds = [];
     let start = 0;
     for (;;) {
-      progressText.textContent = `Fetching match IDs… ${start}–${start + PAGE_SIZE - 1}`;
+      progressText && (progressText.textContent = `Fetching match IDs… ${start}–${start + PAGE_SIZE - 1}`);
       const ids = await fetchJSON(api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`));
       if (!ids.length) break;
       allIds.push(...ids);
@@ -309,6 +318,7 @@ function dedupeById(list){ const seen=new Set(); const out=[]; for (const m of l
 function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); renderDuos(); updatePinButton(); }
 
 function renderKPIs(){
+  if (!kpisBox) return;
   const list = CURRENT.matches;
   const places = list.map(m=>Number(m.placement)).filter(Number.isFinite);
   const avg = places.length ? (places.reduce((a,b)=>a+b,0)/places.length).toFixed(2) : "0.00";
@@ -325,6 +335,8 @@ function renderKPIs(){
 }
 
 function renderSidebar(){
+  if (!winsChecklist || !hardestList || !placementsCanvas) return;
+
   const byChamp = groupBy(CURRENT.matches, m=>m.championName);
   const rows = Object.keys(byChamp)
     .filter(name => byChamp[name].some(m=>m.placement===1))
@@ -351,6 +363,7 @@ function renderSidebar(){
 }
 
 function renderHistory(){
+  if (!matchesBox) return;
   const listAll = CURRENT.matches.slice();
   let list = listAll;
   if (CURRENT.filter === "wins") list = listAll.filter(m=>m.placement===1);
@@ -368,7 +381,7 @@ function renderHistory(){
     const p=Number(m.placement); const cls=p===1?"p1":p===2?"p2":p===3?"p3":"px";
     const ally = m.allyChampionName ? ` · with ${m.allyChampionName}` : "";
     return `<article class="item" data-id="${m.matchId}">
-      <div class="icon"><img src="${champIcon(m.championName)}" alt="${m.championName}"></div>
+      <div class="icon"><img src="${champIcon(m.championName)}" alt="${m.championName)}"></div>
       <div>
         <div class="head"><strong>${m.championName}${ally}</strong><span class="badge ${cls}">${ordinal(p)}</span></div>
         <div class="small">KDA, ${m.kills}/${m.deaths}/${m.assists}</div>
@@ -379,6 +392,7 @@ function renderHistory(){
 }
 
 function renderSynergy(){
+  if (!synergyTableBody || !bestDuoEl || !commonDuoEl) return;
   const agg = {};
   for (const m of CURRENT.matches){
     const ally = m.allyChampionName || "Unknown";
@@ -389,19 +403,17 @@ function renderSynergy(){
     .filter(x=>x.ally!=="Unknown")
     .map(x=>({ ...x, wr: x.games ? Math.round((100*x.wins)/x.games) : 0, avg: x.games ? (x.sumPlace/x.games).toFixed(2) : "—" }));
 
-  if (bestDuoEl && commonDuoEl) {
-    const enough = rows.filter(x => x.games >= 5);
-    const best = enough.slice().sort((a,b)=> b.wr - a.wr || b.games - a.games)[0];
-    const common = rows.slice().sort((a,b)=> b.games - a.games)[0];
+  const enough = rows.filter(x => x.games >= 5);
+  const best = enough.slice().sort((a,b)=> b.wr - a.wr || b.games - a.games)[0];
+  const common = rows.slice().sort((a,b)=> b.games - a.games)[0];
 
-    bestDuoEl.innerHTML = best
-      ? `<img src="${champIcon(best.ally)}" alt="${best.ally}">${best.ally} • ${best.wr}% WR (${best.games} games)`
-      : `<span class="muted">Not enough games yet</span>`;
+  bestDuoEl.innerHTML = best
+    ? `<img src="${champIcon(best.ally)}" alt="${best.ally}">${best.ally} • ${best.wr}% WR (${best.games} games)`
+    : `<span class="muted">Not enough games yet</span>`;
 
-    commonDuoEl.innerHTML = common
-      ? `<img src="${champIcon(common.ally)}" alt="${common.ally}">${common.ally} • ${common.games} games`
-      : `<span class="muted">No duo games yet</span>`;
-  }
+  commonDuoEl.innerHTML = common
+    ? `<img src="${champIcon(common.ally)}" alt="${common.ally}">${common.ally} • ${common.games} games`
+    : `<span class="muted">No duo games yet</span>`;
 
   synergyTableBody.innerHTML = rows.length
     ? rows.sort((a,b)=> b.wr - a.wr).map(x=>`
@@ -414,6 +426,7 @@ function renderSynergy(){
 
 // Best Duo Partners (por jogador)
 function renderDuos(){
+  if (!duoTableBody) return;
   const agg = new Map();
   const nameMap = new Map();
 
@@ -463,6 +476,7 @@ function buildProgress(matches){
 }
 
 function populateChampionDatalist(){
+  if (!champDatalist) return;
   const set = new Set(CURRENT.matches.map(m=>m.championName).filter(Boolean));
   const opts = [...set].sort((a,b)=>a.localeCompare(b)).map(c=>`<option value="${c}">`).join("");
   champDatalist.innerHTML = opts;
