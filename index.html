@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LeagueArena.gg</title>
-  <link rel="stylesheet" href="styles.css?v=build8" />
+  <link rel="stylesheet" href="styles.css?v=build9" />
 </head>
 <body class="home">
   <main class="hero">
@@ -28,7 +28,7 @@
     const region = document.getElementById('home-region').value;
     const id = document.getElementById('home-riotid').value.trim();
     if(!id.includes('#')) { alert('Use Name#TAG'); return; }
-    const url = new URL('app.html', location.href);
+    const url = new URL('./app.html', location.href);
     url.searchParams.set('id', id);
     url.searchParams.set('region', region);
     location.href = url.toString();
