@@ -3,7 +3,7 @@
 :root{
   --bg:#0f1216; --panel:#0f141b; --panel-2:#111824;
   --text:#e6edf3; --muted:#9aa4ad; --border:#2d333b;
-  --green:#238636; --red:#b33a3a;
+  --green:#238636; --green-2:#2ea043; --red:#b33a3a;
 
   /* badge colors (match cards) */
   --p1:#1f3c1f; --p1text:#a9e6b0;
@@ -26,18 +26,27 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-appl
 .topbar .container{display:flex;align-items:center;gap:12px;padding:10px 0}
 .brand{margin:0;font-size:1.35rem;font-weight:800;letter-spacing:.2px}
 
+/* Tabs with underline + soft glow on active */
 .tabs{display:flex;gap:8px}
 .tabs button{
-  background:#202736;border:1px solid var(--border);color:var(--text);
+  position:relative; background:#202736;border:1px solid var(--border);color:var(--text);
   padding:8px 12px;border-radius:10px;cursor:pointer;transition:.15s;
 }
-.tabs button.active{background:var(--green);color:#fff}
-
-.search{display:flex;gap:8px;margin-left:auto}
-.search input{
-  padding:10px 12px;border-radius:10px;border:1px solid var(--border);
-  background:#161b22;color:var(--text);width:240px
+.tabs button.active{
+  background:var(--green); color:#fff; box-shadow:0 0 0 3px rgba(46,160,67,.15);
 }
+.tabs button.active::after{
+  content:""; position:absolute; left:10px; right:10px; bottom:-7px; height:3px;
+  background:var(--green-2); border-radius:3px;
+}
+
+/* Search */
+.search{display:flex;gap:8px;margin-left:auto;align-items:center}
+.search input,.search select{
+  padding:10px 12px;border-radius:10px;border:1px solid var(--border);
+  background:#161b22;color:var(--text)
+}
+.search input{width:240px}
 .search button{
   padding:10px 14px;border-radius:10px;border:0;background:var(--green);
   color:#fff;cursor:pointer
@@ -57,14 +66,15 @@ button.red{border-color:#5a1e1e;color:#ffb3b3}
 .kpis .tile{border:1px solid var(--border);background:#0e131a;border-radius:12px;padding:12px}
 .kpis .big{font-size:1.55rem;font-weight:800}
 
-/* ===== Tabs content visibility ===== */
+/* Tabs content visibility */
 .tab{display:none}
 .tab.active{display:block}
 
-/* ===== Filters (segmented) ===== */
+/* ===== History toolbar ===== */
+.toolbar{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px}
 .filters.segmented{
   display:inline-flex;gap:0;background:#0e131a;border:1px solid var(--border);
-  border-radius:999px;padding:4px;margin-bottom:10px
+  border-radius:999px;padding:4px
 }
 .filters.segmented button{
   border:0;background:transparent;color:var(--muted);
@@ -72,6 +82,11 @@ button.red{border-color:#5a1e1e;color:#ffb3b3}
 }
 .filters.segmented button:hover{color:#d7dee5}
 .filters.segmented button.active{background:var(--green);color:#fff}
+.champ-filter{display:flex;align-items:center;gap:8px}
+.champ-filter select{
+  min-width:200px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);
+  background:#161b22;color:var(--text)
+}
 
 /* ===== Checklist & tags ===== */
 .checklist{display:grid;grid-template-columns:repeat(auto-fill,minmax(36px,1fr));gap:8px;margin-top:6px}
@@ -102,7 +117,14 @@ button.red{border-color:#5a1e1e;color:#ffb3b3}
 .badge.px{background:var(--px);color:var(--pxtext)}
 .more{display:flex;justify-content:center;margin:14px 0}
 
-/* ===== Tables ===== */
+/* ===== Duo KPI tiles ===== */
+.duo-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-bottom:10px}
+.duo-tile{border:1px solid var(--border);background:#0e131a;border-radius:12px;padding:12px}
+.duo-title{color:var(--muted);font-size:.9rem;margin-bottom:6px}
+.duo-value{font-weight:700;font-size:1.1rem;display:flex;align-items:center;gap:8px}
+.duo-value img{width:22px;height:22px;border-radius:6px;border:1px solid var(--border)}
+
+/* ===== Table ===== */
 .table{width:100%;border-collapse:collapse;font-size:.95rem}
 .table th,.table td{border-bottom:1px solid var(--border);padding:8px 6px;text-align:left}
 .row{display:flex;align-items:center;gap:8px}
