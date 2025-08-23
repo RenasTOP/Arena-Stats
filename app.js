@@ -1,11 +1,11 @@
-// Arena.gg frontend, safe 10-id chunks para evitar limites de subrequests da Cloudflare
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // sem slash final
-const ARENA_QUEUE = 1700;
+// Arena.gg frontend, chunks de 10 para não rebentar subrequests
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
+const ARENA_QUEUE = 1700; // mantém, ver nota no worker para múltiplas filas
 
-const PAGE_SIZE = 100;      // máximo Riot para /match-ids
-const CHUNK_SIZE = 10;      // <= MAX_IDS_PER_REQ do worker para ficar tranquilo
+const PAGE_SIZE = 100;
+const CHUNK_SIZE = 10;
 const IDS_PAGE_DELAY = 200;
-const CACHE_VERSION = "v7";
+const CACHE_VERSION = "v8";
 
 function api(pathAndQuery){
   const base = API_BASE.replace(/\/+$/, "");
@@ -13,7 +13,7 @@ function api(pathAndQuery){
   return `${base}${path}`;
 }
 
-// ---- DOM ----
+// DOM
 const tabs = document.getElementById("tabs");
 const tabViews = {
   matches: document.getElementById("tab-matches"),
@@ -26,6 +26,7 @@ const riotIdInput = document.getElementById("riotid");
 const regionSelect = document.getElementById("region-select");
 const btnUpdate = document.getElementById("btn-update");
 
+const mainLayout = document.getElementById("main-layout");
 const kpisBox = document.getElementById("kpis");
 const matchesBox = document.getElementById("matches");
 
@@ -46,15 +47,15 @@ const duoTableBody = document.querySelector("#duo-table tbody");
 const bestDuoEl = document.getElementById("best-duo")?.querySelector(".duo-value");
 const commonDuoEl = document.getElementById("common-duo")?.querySelector(".duo-value");
 
-// Progress UI
+// Progress
 const progressWrap = document.getElementById("progress-wrap");
 const progressBar  = document.getElementById("progress-bar");
 const progressText = document.getElementById("progress-text");
 
-// Status line
+// Status
 const statusBox = createStatus();
 
-// ---- State ----
+// State
 let DD_VERSION = "15.16.1";
 const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Khazix", VelKoz:"Velkoz", ChoGath:"Chogath", KaiSa:"Kaisa", LeBlanc:"Leblanc", DrMundo:"DrMundo", Nunu:"Nunu", Renata:"Renata", RekSai:"RekSai", KogMaw:"KogMaw", BelVeth:"Belveth", TahmKench:"TahmKench" };
 
@@ -70,7 +71,7 @@ let CURRENT = {
 
 const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
 
-// ---- Tabs ----
+// Tabs
 if (tabs) {
   tabs.addEventListener("click", (e)=>{
     const btn = e.target.closest("button"); if (!btn) return;
@@ -84,7 +85,7 @@ if (tabs) {
   });
 }
 
-// ---- Filters ----
+// Filters
 filters.addEventListener("click", (e)=>{
   const btn = e.target.closest("button"); if (!btn) return;
   [...filters.children].forEach(b=>b.classList.remove("active"));
@@ -95,7 +96,7 @@ filters.addEventListener("click", (e)=>{
 champInput.addEventListener("input", ()=>{ CURRENT.champQuery = (champInput.value || "").trim(); renderHistory(); });
 champClear.addEventListener("click", ()=>{ champInput.value=""; CURRENT.champQuery=""; renderHistory(); });
 
-// ---- Actions ----
+// Actions
 form.addEventListener("submit", onSearch);
 btnUpdate.addEventListener("click", () => refresh(true));
 matchesBox.addEventListener("click", (e)=>{
@@ -107,16 +108,17 @@ matchesBox.addEventListener("click", (e)=>{
   url.searchParams.set("id", id);
   url.searchParams.set("puuid", CURRENT.puuid || "");
   url.searchParams.set("region", CURRENT.region || "");
-  url.searchParams.set("regionUI", regionSelect.value || "EUW"); // passa a região UI para os links de nomes
+  url.searchParams.set("regionUI", regionSelect.value || "EUW");
   location.href = url.toString();
 });
 
-// ---- Helpers ----
+// Helpers
 function champIcon(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`; }
 function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "?"; return `${n}th`; }
 function timeAgo(ts){ if(!ts) return "unknown"; const s=Math.max(1,Math.floor((Date.now()-Number(ts))/1000)); const m=Math.floor(s/60); if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<48) return `${h}h ago`; const d=Math.floor(h/24); return `${d}d ago`; }
 function status(t){ statusBox.textContent = t||""; }
 function setLastUpdated(ts){ lastUpdatedEl.textContent = ts ? `Last updated, ${new Date(ts).toLocaleString()}` : ""; }
+function setMainVisible(v){ if (mainLayout) mainLayout.hidden = !v; }
 
 async function fetchJSON(url, tries=3, delay=600){
   const r = await fetch(url);
@@ -134,12 +136,12 @@ function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), 
 function createStatus(){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; document.body.prepend(el); return el; }
 function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
 
-// ---- Progress UI helpers ----
-function showIndeterminate(msg){ progressWrap.hidden=false; progressBar.classList.add('indeterminate'); progressBar.style.width='100%'; progressText.textContent=msg||'Working…'; }
+// Progress UI
+function showIndeterminate(msg){ progressWrap.hidden=false; progressBar.classList.add('indeterminate'); progressBar.style.width='100%'; progressText.textContent=msg||'Working...'; }
 function showDeterminate(msg,pct){ progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
 function hideProgress(){ progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
 
-// ---- URL prefill e auto-run ----
+// Prefill e auto-run
 function prefillFromURL(){
   const u = new URL(location.href);
   const id = u.searchParams.get('id');
@@ -151,7 +153,7 @@ function prefillFromURL(){
   }
 }
 
-// ---- Search e Refresh ----
+// Search
 async function onSearch(e){
   e.preventDefault();
   const raw = riotIdInput.value.trim();
@@ -160,33 +162,31 @@ async function onSearch(e){
   await initDDragon();
 
   try{
-    status("Looking up account…");
+    status("Looking up account...");
+    setMainVisible(false); // esconde o conteúdo enquanto carrega
+    showIndeterminate("Looking up account...");
+
     const acc = await fetchJSON(api(`/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`));
     CURRENT.gameName = acc.gameName; CURRENT.tagLine = acc.tagLine; CURRENT.puuid = acc.puuid;
 
-    const cached = loadCache(acc.puuid);
-    if (cached?.matches){
-      Object.assign(CURRENT, { matches: cached.matches, ids: cached.ids||[], region: cached.region||null, lastUpdated: cached.updatedAt||null });
-      populateChampionDatalist();
-      renderAll(); setLastUpdated(cached.updatedAt); status("Refreshing full history…");
-    } else {
-      Object.assign(CURRENT, { matches: [], ids: [], region: null, lastUpdated: null });
-    }
+    // Ignoramos o cache visual durante a pesquisa, para só mostrar quando terminar mesmo
+    Object.assign(CURRENT, { matches: [], ids: [], region: null, lastUpdated: null });
 
     CURRENT.region = mapRegionUItoRouting(regionSelect.value);
     await refresh(true);
-  } catch(err){ console.error(err); status(err.message || "Error"); hideProgress(); }
+  } catch(err){ console.error(err); status(err.message || "Error"); hideProgress(); setMainVisible(false); }
 }
 
-async function refresh(full){
+// Refresh
+async function refresh(){
   if (!CURRENT.puuid) return;
   try{
-    // 1) Buscar todos os IDs
-    showIndeterminate("Fetching match IDs…");
+    // 1) Buscar IDs
+    showIndeterminate("Fetching match IDs...");
     let allIds = [];
     let start = 0;
     for (;;) {
-      progressText.textContent = `Fetching match IDs… ${start}–${start + PAGE_SIZE - 1}`;
+      progressText.textContent = `Fetching match IDs... ${start}–${start + PAGE_SIZE - 1}`;
       const ids = await fetchJSON(api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`));
       if (!ids.length) break;
       allIds.push(...ids);
@@ -196,26 +196,23 @@ async function refresh(full){
     }
     CURRENT.ids = allIds.slice();
 
-    // 2) Detalhes em chunks de 10
-    const known = new Set(CURRENT.matches.map(m=>m.matchId));
-    const toFetch = allIds.filter(id=>!known.has(id));
-    const total = toFetch.length;
+    // 2) Detalhes em chunks
+    const total = allIds.length;
     let fetched = 0;
-    showDeterminate(`Fetching match details… 0 / ${total}`, 0);
+    showDeterminate(`Fetching match details... 0 / ${total}`, 0);
 
     let collected = [];
-    for (let i=0;i<toFetch.length;i+=CHUNK_SIZE){
-      const slice = toFetch.slice(i, i+CHUNK_SIZE);
+    for (let i=0;i<allIds.length;i+=CHUNK_SIZE){
+      const slice = allIds.slice(i, i+CHUNK_SIZE);
       const part = await fetchJSON(api(`/matches?ids=${slice.join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`));
       collected = collected.concat(part);
       fetched += slice.length;
       const pct = total ? Math.round((100*fetched)/total) : 100;
-      showDeterminate(`Fetching match details… ${Math.min(fetched,total)} / ${total}`, pct);
-      renderHistory(dedupeById(CURRENT.matches.concat(collected)).sort((a,b)=>b.gameStart-a.gameStart));
+      showDeterminate(`Fetching match details... ${Math.min(fetched,total)} / ${total}`, pct);
     }
 
     // 3) Merge, cache e render
-    CURRENT.matches = dedupeById(collected.concat(CURRENT.matches)).sort((a,b)=>b.gameStart-a.gameStart);
+    CURRENT.matches = dedupeById(collected).sort((a,b)=>b.gameStart-a.gameStart);
 
     const payload = { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() };
     saveCache(CURRENT.puuid, payload);
@@ -225,16 +222,18 @@ async function refresh(full){
     renderAll();
     hideProgress();
     status("");
+    setMainVisible(true); // só mostra aqui, quando acabou tudo
   } catch(err){
     console.error(err);
     status(err.message || "Refresh failed");
     hideProgress();
+    setMainVisible(false);
   }
 }
 
 function dedupeById(list){ const seen=new Set(); const out=[]; for (const m of list){ if(!m?.matchId||seen.has(m.matchId)) continue; seen.add(m.matchId); out.push(m);} return out; }
 
-// ---- Renderers
+// Renderers
 function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); renderDuos(); }
 
 function renderKPIs(){
@@ -245,7 +244,7 @@ function renderKPIs(){
   const total = list.length;
   const champs = new Set(list.map(m=>m.championName)).size;
   kpisBox.innerHTML = [
-    tile(`${CURRENT.gameName ? `${CURRENT.gameName}#${CURRENT.tagLine}` : "—"}`,"Player"),
+    tile(`${CURRENT.gameName ? `${CURRENT.gameName}#${CURRENT.tagLine}` : "..."}`,"Player"),
     tile(`${total}`,"Games loaded"),
     tile(`${avg}`,"Average place"),
     tile(`${wins}`,"1st places"),
@@ -270,7 +269,7 @@ function renderSidebar(){
     .sort((a,b)=>b.attemptsUntilFirst-a.attemptsUntilFirst)
     .slice(0,5);
   hardestList.innerHTML = hardest.length ? hardest.map(p=>
-    `<span class="tag"><img src="${champIcon(p.name)}" width="16" height="16" style="border-radius:4px;border:1px solid var(--border)"> ${p.name} · ${p.attemptsUntilFirst}</span>`
+    `<span class="tag"><img src="${champIcon(p.name)}" width="16" height="16" style="border-radius:4px;border:1px solid var(--border)"> ${p.name} , ${p.attemptsUntilFirst}</span>`
   ).join("") : `<div class="muted small">No wins yet.</div>`;
 
   const counts = Array(8).fill(0);
@@ -279,8 +278,8 @@ function renderSidebar(){
   if (placementsCanvas) drawPlacementBars(placementsCanvas, counts);
 }
 
-function renderHistory(forcedList){
-  const listAll = (forcedList || CURRENT.matches).slice();
+function renderHistory(){
+  const listAll = CURRENT.matches.slice();
   let list = listAll;
   if (CURRENT.filter === "wins") list = listAll.filter(m=>m.placement===1);
   else if (CURRENT.filter === "neverwon") {
@@ -295,7 +294,7 @@ function renderHistory(forcedList){
 
   matchesBox.innerHTML = list.map(m=>{
     const p=Number(m.placement); const cls=p===1?"p1":p===2?"p2":p===3?"p3":"px";
-    const ally = m.allyChampionName ? ` · with ${m.allyChampionName}` : "";
+    const ally = m.allyChampionName ? ` , with ${m.allyChampionName}` : "";
     return `<article class="item" data-id="${m.matchId}">
       <div class="icon"><img src="${champIcon(m.championName)}" alt="${m.championName}"></div>
       <div>
@@ -316,7 +315,7 @@ function renderSynergy(){
   }
   const rows = Object.values(agg)
     .filter(x=>x.ally!=="Unknown")
-    .map(x=>({ ...x, wr: x.games ? Math.round((100*x.wins)/x.games) : 0, avg: x.games ? (x.sumPlace/x.games).toFixed(2) : "—" }));
+    .map(x=>({ ...x, wr: x.games ? Math.round((100*x.wins)/x.games) : 0, avg: x.games ? (x.sumPlace/x.games).toFixed(2) : "..." }));
 
   if (bestDuoEl && commonDuoEl) {
     const enough = rows.filter(x => x.games >= 5);
@@ -341,7 +340,7 @@ function renderSynergy(){
     : `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
 }
 
-// Best Duo Partners, por jogador, agrupa por allyPuuid
+// Best Duo Partners
 function renderDuos(){
   const agg = new Map();
   const nameMap = new Map();
@@ -360,7 +359,7 @@ function renderDuos(){
   const rows = [...agg.values()].map(s => {
     const name = s.puuid ? (nameMap.get(s.puuid) || s.display || "Unknown") : s.display;
     const wr = s.games ? Math.round((100*s.wins)/s.games) : 0;
-    const avg = s.games ? (s.sumPlace/s.games).toFixed(2) : "—";
+    const avg = s.games ? (s.sumPlace/s.games).toFixed(2) : "...";
     return { name, games: s.games, wins: s.wins, wr, avg };
   }).sort((a,b)=> b.games - a.games);
 
@@ -376,7 +375,7 @@ function renderDuos(){
     : `<tr><td colspan="5" class="muted">No duo partners found.</td></tr>`;
 }
 
-// ---- Utils
+// Utils
 function buildProgress(matches){
   const byChamp = groupBy(matches, m=>m.championName);
   const out = {};
@@ -435,5 +434,5 @@ function drawPlacementBars(canvas, counts){
   }
 }
 
-// kick off
+// Start
 prefillFromURL();
