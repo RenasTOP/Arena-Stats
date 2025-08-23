@@ -1,4 +1,4 @@
-// Arena.gg frontend (Matches + Synergy + Best Duo Partners)
+// Arena.gg frontend — Best Duo Partners fixed (group by allyPuuid)
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
 const ARENA_QUEUE = 1700;
 
@@ -17,7 +17,7 @@ const tabs = document.getElementById("tabs");
 const tabViews = {
   matches: document.getElementById("tab-matches"),
   synergy: document.getElementById("tab-synergy"),
-  duos:    document.getElementById("tab-duos"),   // NEW
+  duos:    document.getElementById("tab-duos"),
 };
 
 const form = document.getElementById("search-form");
@@ -41,8 +41,6 @@ const lastUpdatedEl = document.getElementById("last-updated");
 
 const filters = document.querySelector("#tab-matches .filters");
 const synergyTableBody = document.querySelector("#synergy-table tbody");
-
-// NEW: Best Duo Partners table body
 const duoTableBody = document.querySelector("#duo-table tbody");
 
 const bestDuoEl = document.getElementById("best-duo")?.querySelector(".duo-value");
@@ -64,7 +62,8 @@ let CURRENT = {
   champQuery: "",
   lastUpdated: null,
 };
-const cacheKey = (puuid)=>`arena_cache_v1:${puuid}`;
+const CACHE_VERSION = "v3";
+const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
 
 // ---- Tabs ----
 tabs.addEventListener("click", (e)=>{
@@ -132,7 +131,7 @@ async function initDDragon(){
 function loadCache(puuid){ try { return JSON.parse(localStorage.getItem(cacheKey(puuid))||"null"); } catch { return null; } }
 function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
 function createStatus(){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; document.body.prepend(el); return el; }
-function mapRegion(ui){ if (ui==="na") return "americas"; return "europe"; }
+function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
 
 // ---- Search / Refresh ----
 async function onSearch(e){
@@ -148,14 +147,15 @@ async function onSearch(e){
     CURRENT.gameName = acc.gameName; CURRENT.tagLine = acc.tagLine; CURRENT.puuid = acc.puuid;
 
     const cached = loadCache(acc.puuid);
-    if (cached?.matches?.length){
+    if (cached?.matches){
       Object.assign(CURRENT, { matches: cached.matches, ids: cached.ids||[], nextStart: cached.nextStart||0, region: cached.region||null, lastUpdated: cached.updatedAt||null });
+      populateChampionDatalist();
       renderAll(); setLastUpdated(cached.updatedAt); status("Refreshing…");
     } else {
       Object.assign(CURRENT, { matches: [], ids: [], nextStart: 0, region: null, lastUpdated: null });
     }
 
-    CURRENT.region = mapRegion(regionSelect.value);
+    CURRENT.region = mapRegionUItoRouting(regionSelect.value);
 
     await refresh(true);
   } catch(err){ console.error(err); status(err.message || "Error"); }
@@ -306,7 +306,6 @@ function renderSynergy(){
     .filter(x=>x.ally!=="Unknown")
     .map(x=>({ ...x, wr: x.games ? Math.round((100*x.wins)/x.games) : 0, avg: x.games ? (x.sumPlace/x.games).toFixed(2) : "—" }));
 
-  // KPIs
   if (bestDuoEl && commonDuoEl) {
     const enough = rows.filter(x => x.games >= 5);
     const best = enough.slice().sort((a,b)=> b.wr - a.wr || b.games - a.games)[0];
@@ -333,25 +332,28 @@ function renderSynergy(){
     : `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
 }
 
-// NEW: Best Duo Partners (by player name)
+// ---- Best Duo Partners (by player; group by allyPuuid)
 function renderDuos(){
-  const agg = {};
+  const agg = new Map();            // puuid -> stats
+  const nameMap = new Map();        // puuid -> last seen display name
+
   for (const m of CURRENT.matches){
-    const name = m.allyName; // e.g., "Ally#TAG"
-    if (!name) continue;
-    const a = (agg[name] ||= { games:0, wins:0, sumPlace:0 });
+    const pid = m.allyPuuid || null;
+    const display = m.allyName || "Unknown";
+    if (pid) nameMap.set(pid, display);  // remember prettiest name
+
+    const key = pid || `name:${display}`; // fallback for very old rows
+    const a = agg.get(key) || { games:0, wins:0, sumPlace:0, puuid: pid, display };
     a.games++; a.wins += (m.placement===1 ? 1 : 0); a.sumPlace += Number(m.placement)||0;
+    agg.set(key, a);
   }
 
-  const rows = Object.entries(agg)
-    .map(([name, s]) => ({
-      name,
-      games: s.games,
-      wins: s.wins,
-      wr: s.games ? Math.round((100*s.wins)/s.games) : 0,
-      avg: s.games ? (s.sumPlace/s.games).toFixed(2) : "—",
-    }))
-    .sort((a,b)=> b.games - a.games);
+  const rows = [...agg.values()].map(s => {
+    const name = s.puuid ? (nameMap.get(s.puuid) || s.display || "Unknown") : s.display;
+    const wr = s.games ? Math.round((100*s.wins)/s.games) : 0;
+    const avg = s.games ? (s.sumPlace/s.games).toFixed(2) : "—";
+    return { name, games: s.games, wins: s.wins, wr, avg };
+  }).sort((a,b)=> b.games - a.games);
 
   duoTableBody.innerHTML = rows.length
     ? rows.map(x => `
@@ -406,7 +408,7 @@ function drawPlacementBars(canvas, counts){
     ctx.fillStyle = "#7f8c8d"; ctx.font="12px system-ui"; ctx.fillText(String(y), 10, yy+4);
   }
 
-  // colors (vivid for top 3, neutral for the rest)
+  // vivid colors for top 3, neutral for others
   const colors = ["#ffd95e","#6eb4ff","#ffb26b","#b9c2cc","#b9c2cc","#b9c2cc","#b9c2cc","#b9c2cc"];
 
   const n = counts.length;
