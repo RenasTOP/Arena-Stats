@@ -9,7 +9,9 @@
       <stop offset="0%" stop-color="#7dd3ff"/>
       <stop offset="100%" stop-color="#4aa3ff"/>
     </linearGradient>
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+
+    <!-- subtle outer glow for star -->
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
       <feGaussianBlur stdDeviation="3" result="b"/>
       <feMerge>
         <feMergeNode in="b"/>
@@ -24,8 +26,20 @@
           fill="#0f141b" stroke="#2d333b" stroke-width="2"/>
     <path d="M60 10 L108 26 L108 78 Q86 102 60 122 Q34 102 12 78 L12 26 Z"
           fill="url(#g2)" opacity="0.18"/>
+
+    <!-- Glowing star with a very gentle pulse -->
     <g transform="translate(60,50)" filter="url(#glow)">
-      <path d="M0 -18 L4 -4 L18 0 L4 4 L0 18 L-4 4 L-18 0 L-4 -4 Z" fill="url(#g1)"/>
+      <g>
+        <path id="star" d="M0 -18 L4 -4 L18 0 L4 4 L0 18 L-4 4 L-18 0 L-4 -4 Z" fill="url(#g1)">
+          <!-- pulse scale -->
+          <animateTransform attributeName="transform" attributeType="XML"
+                            type="scale" values="0.98;1.04;0.98"
+                            dur="2.6s" repeatCount="indefinite" />
+          <!-- breathe opacity -->
+          <animate attributeName="opacity" values="0.95;1;0.95"
+                   dur="2.6s" repeatCount="indefinite" />
+        </path>
+      </g>
     </g>
   </g>
 
