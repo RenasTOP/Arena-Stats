@@ -3,30 +3,28 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>LeagueArena.gg — Home</title>
+  <title>LeagueArena.gg — Arena stats</title>
   <link id="css" rel="stylesheet" href="styles.css">
   <link rel="icon" href="logo.svg">
 </head>
 <body class="home-body">
-  <header class="topbar silent">
-    <div class="container">
-      <h1 class="brand"><img src="logo.svg" alt="LeagueArena.gg" class="brand-logo-small" /></h1>
-    </div>
-  </header>
+  <!-- No header on home to avoid double logos -->
 
   <main class="hero">
     <div class="hero-inner">
       <img src="logo.svg" alt="LeagueArena.gg" class="logo-hero" />
       <p class="tagline">Arena stats, win tracking, and duo insights.</p>
 
-      <form id="home-search" class="hero-search">
-        <select id="home-region" title="Region">
-          <option value="na" selected>NA</option>
-          <option value="euw">EUW</option>
-          <option value="eune">EUNE</option>
-        </select>
-        <input id="home-riotid" placeholder="Riot ID (Name#TAG)" autocomplete="off" />
-        <button type="submit">Search</button>
+      <form id="home-search" class="hero-search glass">
+        <div class="inputs">
+          <select id="home-region" title="Region" aria-label="Region">
+            <option value="na" selected>NA</option>
+            <option value="euw">EUW</option>
+            <option value="eune">EUNE</option>
+          </select>
+          <input id="home-riotid" placeholder="Riot ID (Name#TAG)" autocomplete="off" />
+        </div>
+        <button type="submit" class="cta">Search</button>
       </form>
 
       <small class="muted">Powered by Riot Games API • Icons by Data Dragon</small>
@@ -38,7 +36,7 @@
   </footer>
 
   <script>
-    // redirect to app.html with params
+    // Redirect to the app with params
     document.getElementById('home-search').addEventListener('submit', (e)=>{
       e.preventDefault();
       const id = document.getElementById('home-riotid').value.trim();
