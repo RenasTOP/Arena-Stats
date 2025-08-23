@@ -17,6 +17,7 @@
       <nav class="tabs" id="tabs">
         <button data-tab="matches" class="active">Matches</button>
         <button data-tab="synergy">Duo Synergies</button>
+        <button data-tab="duos">Best Duo Partners</button> <!-- NEW -->
       </nav>
 
       <form id="search-form" class="search">
@@ -59,7 +60,7 @@
 
     <!-- Right content -->
     <section class="content">
-      <!-- MATCHES (KPIs + Filters + History) -->
+      <!-- MATCHES -->
       <div id="tab-matches" class="tab active">
         <section class="kpis card" id="kpis"></section>
 
@@ -86,7 +87,7 @@
         </div>
       </div>
 
-      <!-- SYNERGY -->
+      <!-- SYNERGY (champion ally stats) -->
       <div id="tab-synergy" class="tab">
         <section class="card">
           <h3>Duo synergies (your ally pair)</h3>
@@ -116,6 +117,26 @@
           </table>
         </section>
       </div>
+
+      <!-- BEST DUO PARTNERS (by player) -->
+      <div id="tab-duos" class="tab">
+        <section class="card">
+          <h3>Your Best Duo Partners (players)</h3>
+          <table class="table" id="duo-table">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Games</th>
+                <th>1st Places</th>
+                <th>Win %</th>
+                <th>Avg place</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+      </div>
+
     </section>
   </main>
 
@@ -128,18 +149,14 @@
     const ver = new Date(document.lastModified).getTime();
     const css = document.getElementById('css');
     if (css) css.href = `styles.css?v=${ver}`;
-    import(`./app.js?v=${ver}`).then(mod=>{
-      // Auto-prefill from query (?id=Name#TAG&region=na|euw|eune)
+    import(`./app.js?v=${ver}`).then(()=>{
       const q = new URLSearchParams(location.search);
       const id = q.get('id'); const region = q.get('region');
       if (region) document.getElementById('region-select').value = region;
       if (id) {
         document.getElementById('riotid').value = id;
-        // Simulate submit (app.js attaches the real handler)
-        setTimeout(()=>{
-          const form = document.getElementById('search-form');
-          form?.dispatchEvent(new Event('submit', { cancelable:true, bubbles:true }));
-        }, 50);
+        setTimeout(()=>document.getElementById('search-form')
+          ?.dispatchEvent(new Event('submit', { cancelable:true, bubbles:true })), 50);
       }
     });
   </script>
