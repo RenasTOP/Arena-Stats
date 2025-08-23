@@ -15,9 +15,8 @@ function api(pathAndQuery){
 // ---- DOM ----
 const tabs = document.getElementById("tabs");
 const tabViews = {
-  overview: document.getElementById("tab-overview"),
-  history:  document.getElementById("tab-history"),
-  synergy:  document.getElementById("tab-synergy"),
+  matches: document.getElementById("tab-matches"),
+  synergy: document.getElementById("tab-synergy"),
 };
 const form = document.getElementById("search-form");
 const riotIdInput = document.getElementById("riotid");
@@ -26,13 +25,18 @@ const btnUpdate = document.getElementById("btn-update");
 const kpisBox = document.getElementById("kpis");
 const matchesBox = document.getElementById("matches");
 const btnMore = document.getElementById("btn-more");
-const champSelect = document.getElementById("champ-select");
+
+const champInput = document.getElementById("champ-input");
+const champClear = document.getElementById("champ-clear");
+const champDatalist = document.getElementById("champ-datalist");
+
 const winsChecklist = document.getElementById("wins-checklist");
 const hardestList = document.getElementById("hardest-list");
 const placementsCanvas = document.getElementById("placements-canvas");
 const placementsRange = document.getElementById("placements-range");
 const lastUpdatedEl = document.getElementById("last-updated");
-const filters = document.querySelector("#tab-history .filters");
+
+const filters = document.querySelector("#tab-matches .filters");
 const synergyTableBody = document.querySelector("#synergy-table tbody");
 const bestDuoEl = document.getElementById("best-duo").querySelector(".duo-value");
 const commonDuoEl = document.getElementById("common-duo").querySelector(".duo-value");
@@ -44,17 +48,17 @@ const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Kha
 
 let CURRENT = {
   gameName: "", tagLine: "",
-  puuid: null, region: null,
+  puuid: null, region: "europe", // default to EUW routing unless UI says otherwise
   matches: [],
   ids: [],
   nextStart: 0,
   filter: "all",
-  champFilter: "__all__",
+  champQuery: "", // from typeable input
   lastUpdated: null,
 };
 const cacheKey = (puuid)=>`arena_cache_v1:${puuid}`;
 
-// ---- Tabs & filters ----
+// ---- Tabs ----
 tabs.addEventListener("click", (e)=>{
   const btn = e.target.closest("button"); if (!btn) return;
   [...tabs.children].forEach(b=>b.classList.remove("active"));
@@ -62,6 +66,8 @@ tabs.addEventListener("click", (e)=>{
   const key = btn.dataset.tab;
   for (const [k, el] of Object.entries(tabViews)) el.classList.toggle("active", k===key);
 });
+
+// ---- Filters ----
 filters.addEventListener("click", (e)=>{
   const btn = e.target.closest("button"); if (!btn) return;
   [...filters.children].forEach(b=>b.classList.remove("active"));
@@ -69,8 +75,15 @@ filters.addEventListener("click", (e)=>{
   CURRENT.filter = btn.dataset.filter;
   renderHistory();
 });
-champSelect.addEventListener("change", ()=>{
-  CURRENT.champFilter = champSelect.value || "__all__";
+
+// typeable champion filter
+champInput.addEventListener("input", ()=>{
+  CURRENT.champQuery = (champInput.value || "").trim();
+  renderHistory();
+});
+champClear.addEventListener("click", ()=>{
+  champInput.value = "";
+  CURRENT.champQuery = "";
   renderHistory();
 });
 
@@ -113,6 +126,13 @@ function loadCache(puuid){ try { return JSON.parse(localStorage.getItem(cacheKey
 function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
 function createStatus(){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; document.body.prepend(el); return el; }
 
+// map UI region to Riot routing region
+function mapRegion(ui){
+  if (ui === "na") return "americas";
+  if (ui === "euw" || ui === "eune") return "europe";
+  return "europe";
+}
+
 // ---- Search / Refresh ----
 async function onSearch(e){
   e.preventDefault();
@@ -134,13 +154,8 @@ async function onSearch(e){
       Object.assign(CURRENT, { matches: [], ids: [], nextStart: 0, region: null, lastUpdated: null });
     }
 
-    // Auto region unless user overrides UI with a specific region
-    if (regionSelect.value === "auto") {
-      const reg = await fetchJSON(api(`/region?puuid=${encodeURIComponent(CURRENT.puuid)}`));
-      CURRENT.region = reg.region;
-    } else {
-      CURRENT.region = regionSelect.value;
-    }
+    // Region from UI (NA/EUW/EUNE)
+    CURRENT.region = mapRegion(regionSelect.value);
 
     await refresh(true);
   } catch(err){ console.error(err); status(err.message || "Error"); }
@@ -162,7 +177,7 @@ async function refresh(full){
     const payload = { matches: CURRENT.matches, ids: CURRENT.ids, nextStart: CURRENT.nextStart, region: CURRENT.region, updatedAt: Date.now() };
     saveCache(CURRENT.puuid, payload); setLastUpdated(payload.updatedAt);
 
-    populateChampionFilter();
+    populateChampionDatalist();
     renderAll(); status("");
   } catch(err){ console.error(err); status(err.message || "Refresh failed"); }
 }
@@ -181,7 +196,7 @@ async function loadMore(){
 
     saveCache(CURRENT.puuid, { matches: CURRENT.matches, ids: CURRENT.ids, nextStart: CURRENT.nextStart, region: CURRENT.region, updatedAt: Date.now() });
 
-    populateChampionFilter();
+    populateChampionDatalist();
     renderAll(); status("");
   } catch(err){ console.error(err); status(err.message || "Load failed"); }
 }
@@ -252,7 +267,7 @@ function renderSidebar(){
 function renderHistory(forcedList){
   const listAll = (forcedList || CURRENT.matches).slice();
 
-  // base filter
+  // base filters
   let list = listAll;
   if (CURRENT.filter === "wins") list = listAll.filter(m=>m.placement===1);
   else if (CURRENT.filter === "neverwon") {
@@ -260,9 +275,11 @@ function renderHistory(forcedList){
     const lostSet = new Set(Object.values(prog).filter(p=>!p.completed).map(p=>p.name));
     list = listAll.filter(m=>lostSet.has(m.championName));
   }
-  // champion filter
-  if (CURRENT.champFilter !== "__all__") {
-    list = list.filter(m => m.championName === CURRENT.champFilter);
+
+  // champion typeable filter (substring match)
+  if (CURRENT.champQuery){
+    const q = CURRENT.champQuery.toLowerCase();
+    list = list.filter(m => (m.championName||"").toLowerCase().includes(q));
   }
 
   matchesBox.innerHTML = list.map(m=>{
@@ -318,7 +335,7 @@ function renderSynergy(){
     : `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
 }
 
-// ---- Progress, Charts, Utils ----
+// ---- Utils ----
 function buildProgress(matches){
   const byChamp = groupBy(matches, m=>m.championName);
   const out = {};
@@ -332,14 +349,13 @@ function buildProgress(matches){
   }
   return out;
 }
-function populateChampionFilter(){
-  const set = new Set(CURRENT.matches.map(m=>m.championName));
-  const curr = CURRENT.champFilter;
-  champSelect.innerHTML = `<option value="__all__">All champions</option>` +
-    [...set].sort((a,b)=>a.localeCompare(b))
-      .map(c=>`<option value="${c}">${c}</option>`).join("");
-  champSelect.value = set.has(curr) ? curr : "__all__";
+
+function populateChampionDatalist(){
+  const set = new Set(CURRENT.matches.map(m=>m.championName).filter(Boolean));
+  const opts = [...set].sort((a,b)=>a.localeCompare(b)).map(c=>`<option value="${c}">`).join("");
+  champDatalist.innerHTML = opts;
 }
+
 function groupBy(list, fn){ const map={}; for(const x of list){ const k=fn(x); (map[k] ||= []).push(x); } return map; }
 function tile(big,label){ return `<div class="tile"><div class="big">${big}</div><div class="label muted">${label}</div></div>`; }
 
