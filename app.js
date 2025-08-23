@@ -1,11 +1,11 @@
-// Arena.gg frontend — safe batching for Cloudflare + fast history
+// Arena.gg frontend — safe 10-id chunks to avoid Cloudflare subrequest limits
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
 const ARENA_QUEUE = 1700;
 
 const PAGE_SIZE = 100;      // Riot max for /match-ids
-const CHUNK_SIZE = 35;      // <= worker MAX_IDS_PER_REQ (40) to avoid 500 "Too many subrequests"
+const CHUNK_SIZE = 10;      // <= worker MAX_IDS_PER_REQ (12) to stay WELL under subrequest cap
 const IDS_PAGE_DELAY = 200;
-const CACHE_VERSION = "v6";
+const CACHE_VERSION = "v7";
 
 function api(pathAndQuery){
   const base = API_BASE.replace(/\/+$/, "");
@@ -195,7 +195,7 @@ async function refresh(full){
     }
     CURRENT.ids = allIds.slice();
 
-    // 2) Fetch details in safe chunks (<= MAX_IDS_PER_REQ)
+    // 2) Fetch details in safe 10-id chunks
     const known = new Set(CURRENT.matches.map(m=>m.matchId));
     const toFetch = allIds.filter(id=>!known.has(id));
     const total = toFetch.length;
@@ -205,20 +205,7 @@ async function refresh(full){
     let collected = [];
     for (let i=0;i<toFetch.length;i+=CHUNK_SIZE){
       const slice = toFetch.slice(i, i+CHUNK_SIZE);
-      let part;
-      try {
-        part = await fetchJSON(api(`/matches?ids=${slice.join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`));
-      } catch (e) {
-        // If we ever hit the cap, split in half once and retry
-        if (e && String(e).includes("Too many ids")) {
-          const mid = Math.floor(slice.length/2);
-          const a = await fetchJSON(api(`/matches?ids=${slice.slice(0,mid).join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`));
-          const b = await fetchJSON(api(`/matches?ids=${slice.slice(mid).join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`));
-          part = a.concat(b);
-        } else {
-          throw e;
-        }
-      }
+      const part = await fetchJSON(api(`/matches?ids=${slice.join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`));
       collected = collected.concat(part);
       fetched += slice.length;
       const pct = total ? Math.round((100*fetched)/total) : 100;
