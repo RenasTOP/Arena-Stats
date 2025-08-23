@@ -1,9 +1,4 @@
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
-function api(pathAndQuery){
-  const base = API_BASE.replace(/\/+$/, "");
-  const path = pathAndQuery.startsWith("/") ? pathAndQuery : `/${pathAndQuery}`;
-  return `${base}${path}`;
-}
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
 
 let DD_VERSION = "15.16.1";
 const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Khazix", VelKoz:"Velkoz", ChoGath:"Chogath", KaiSa:"Kaisa", LeBlanc:"Leblanc", DrMundo:"DrMundo", Nunu:"Nunu", Renata:"Renata", RekSai:"RekSai", KogMaw:"KogMaw", BelVeth:"Belveth", TahmKench:"TahmKench" };
@@ -23,15 +18,16 @@ const tbody = document.querySelector("#match-table tbody");
 (async function(){
   if (!matchId){ card.textContent="Missing match id"; return; }
   await initDDragon();
+
   try{
-    const match = await fetchJSON(api(`/match?id=${encodeURIComponent(matchId)}${region?`&region=${region}`:""}`));
+    const r = await fetch(`${API_BASE.replace(/\/+$/,"")}/match?id=${encodeURIComponent(matchId)}${region?`&region=${region}`:""}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const match = await r.json();
     render(match);
   } catch(err){
     card.textContent = err.message || "Failed to load match";
   }
 })();
-
-async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }
 
 function render(match){
   const info = match?.info || {};
@@ -49,9 +45,7 @@ function render(match){
     const kda = `${p.kills ?? 0}/${p.deaths ?? 0}/${p.assists ?? 0}`;
     const dmg = p.totalDamageDealtToChampions ?? p.challenges?.teamDamagePercentage ?? 0;
     const gold = p.goldEarned ?? 0;
-    const items = [p.item0,p.item1,p.item2,p.item3,p.item4,p.item5,p.item6]
-      .filter(v=>Number.isFinite(v)&&v>0)
-      .map(id=>`<img src="${itemIcon(id)}" alt="${id}" style="width:22px;height:22px;border-radius:4px;border:1px solid var(--border)">`).join("");
+    const items = [p.item0,p.item1,p.item2,p.item3,p.item4,p.item5,p.item6].filter(v=>Number.isFinite(v)&&v>0).map(id=>`<img src="${itemIcon(id)}" alt="${id}" style="width:22px;height:22px;border-radius:4px;border:1px solid var(--border)">`).join("");
     const augments = [p.playerAugment1,p.playerAugment2,p.playerAugment3,p.playerAugment4].filter(Boolean).map(a=>`<span class="badge sm">${a}</span>`).join(" ");
     return `<tr class="${me}">
       <td class="row"><img src="${champIcon(p.championName)}" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--border);margin-right:6px">${p.championName}</td>
