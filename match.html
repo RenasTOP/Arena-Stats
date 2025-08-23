@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Arena.gg — Match</title>
-  <link rel="stylesheet" href="styles.css?v=match9" />
+  <link rel="stylesheet" href="styles.css?v=match-cdragon" />
 </head>
 <body>
   <header class="topbar">
@@ -15,21 +15,16 @@
   </header>
 
   <main class="container">
-    <!-- Summary -->
-    <section id="match-card" class="card">
-      <!-- filled by JS -->
-    </section>
+    <section id="match-card" class="card"></section>
 
-    <!-- Teams (duo pairs) -->
     <section class="card">
       <div class="section-title">
-        <h3>Teams & players</h3>
-        <small class="muted">ordered by final placement</small>
+        <h3>Teams</h3>
+        <small class="muted">Ordered by final placement</small>
       </div>
-      <div id="teams" class="teams-grid"><!-- JS --></div>
+      <div id="teams" class="teams-grid"></div>
     </section>
 
-    <!-- Raw table -->
     <section class="card" id="table-wrap">
       <div class="section-title">
         <h3>All participants</h3>
@@ -63,6 +58,6 @@
     <div class="container muted">Powered by Riot Games API • icons by Data Dragon • @renas2g</div>
   </footer>
 
-  <script type="module" src="match.js?v=match9"></script>
+  <script type="module" src="match.js?v=match-cdragon"></script>
 </body>
 </html>
