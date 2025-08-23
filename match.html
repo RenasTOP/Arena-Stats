@@ -3,14 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Arena.gg — Match</title>
-  <link id="css" rel="stylesheet" href="styles.css">
+  <title>LeagueArena.gg — Match</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="logo.svg">
 </head>
 <body>
   <header class="topbar">
     <div class="container">
-      <h1 class="brand">Arena.gg</h1>
-      <a class="ghost" href="./">← Back</a>
+      <a href="app.html" class="brand-link">
+        <img src="logo.svg" alt="LeagueArena.gg" class="brand-logo-small" />
+      </a>
+      <a class="ghost" href="app.html">← Back</a>
     </div>
   </header>
 
@@ -22,8 +25,7 @@
         <table class="table" id="match-table">
           <thead>
             <tr>
-              <th>Champion</th><th>Place</th><th>K / D / A</th>
-              <th>Gold</th><th>Damage</th><th>Items</th><th>Augments</th>
+              <th>Champion</th><th>Place</th><th>K / D / A</th><th>Gold</th><th>Damage</th><th>Items</th><th>Augments</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -36,11 +38,6 @@
     <div class="container muted">Powered by Riot Games API • @renas2g</div>
   </footer>
 
-  <!-- Auto cache-bust loader -->
-  <script type="module">
-    const ver = new Date(document.lastModified).getTime();
-    document.getElementById("css").href = `styles.css?v=${ver}`;
-    import(`./match.js?v=${ver}`);
-  </script>
+  <script type="module" src="match.js"></script>
 </body>
 </html>
