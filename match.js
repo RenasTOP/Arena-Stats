@@ -1,20 +1,20 @@
-// Match details, LoG-like, nomes clicáveis e augments via CommunityDragon
+// Match details — LoG-style cards + augments robustos via CDragon
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
 
-// Params
+// --- Params ---
 const params = new URLSearchParams(location.search);
 const matchId = params.get("id");
 const focusPuuid = params.get("puuid");
-const routingRegion = params.get("region") || "";
-let uiRegion = params.get("regionUI") || "";
+const routingRegion = params.get("region") || ""; // americas/europe
+let uiRegion = params.get("regionUI") || "";      // NA/EUW/EUNE para links
 
-// DOM
+// --- DOM ---
 const backLink = document.getElementById("back-link");
 const card = document.getElementById("match-card");
 const teamsWrap = document.getElementById("teams");
 const tbody = document.querySelector("#match-table tbody");
 
-// DDragon
+// --- DDragon (items/champs) ---
 let DD_VERSION = "15.16.1";
 const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Khazix", VelKoz:"Velkoz", ChoGath:"Chogath", KaiSa:"Kaisa", LeBlanc:"Leblanc", DrMundo:"DrMundo", Nunu:"Nunu", Renata:"Renata", RekSai:"RekSai", KogMaw:"KogMaw", BelVeth:"Belveth", TahmKench:"TahmKench" };
 const ITEM_DB = { byId:{} };
@@ -34,20 +34,24 @@ async function initDDragon(){
   } catch {}
 }
 
-// CommunityDragon Augments
+// --- CommunityDragon Augments ---
 const CDRAGON_BASE = "https://raw.communitydragon.org/latest";
 const AUG_DB = { byId: new Map(), byKey: new Map() };
 
-// Múltiplas fontes conhecidas de augments para cherry, robusto
+/** Fontes que costumam alinhar com playerAugment*:
+ *  - game-modifiers.json (tem gameModifierId numérico)
+ *  - arena-augments.json / augments.json / perks.json (fallbacks)
+ *  - cdragon/arena/en_us.json (textos auxiliares)
+ */
 async function loadAugmentsFromCDragon(){
-  const sources = [
-    `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/cherry-augments.json`,
-    `${CDRAGON_BASE}/cdragon/arena/en_us.json`,
+  const candidates = [
+    `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/game-modifiers.json`,
     `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/arena-augments.json`,
     `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/augments.json`,
-    `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/perks.json`
+    `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/perks.json`,
+    `${CDRAGON_BASE}/cdragon/arena/en_us.json`
   ];
-  for (const url of sources){
+  for (const url of candidates){
     try{
       const r = await fetch(url, { cache: "no-store" });
       if (!r.ok) continue;
@@ -85,19 +89,25 @@ function prettifyAugString(raw){
 
 function lookupAug(raw){
   if (raw == null) return null;
+
+  // Numeric id
   const asNum = Number(raw);
   if (Number.isFinite(asNum) && AUG_DB.byId.size){
     const rec = AUG_DB.byId.get(asNum);
     if (rec) return rec;
   }
+
+  // Exact key
   if (AUG_DB.byKey.size){
     const rec = AUG_DB.byKey.get(String(raw));
     if (rec) return rec;
   }
+
+  // Fallback
   return { name: typeof raw === "string" ? prettifyAugString(raw) : `Augment #${raw}` };
 }
 
-// Utils
+// --- Utils ---
 function api(pathAndQuery){
   const base = API_BASE.replace(/\/+$/, "");
   const path = pathAndQuery.startsWith("/") ? pathAndQuery : `/${pathAndQuery}`;
@@ -105,16 +115,10 @@ function api(pathAndQuery){
 }
 async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }
 function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "?"; return `${n}th`; }
-function timeStr(ts){ try { return new Date(ts).toLocaleString(); } catch { return "..."; } }
-function secondsToMin(s){ if (!Number.isFinite(s)) return "..."; const m=Math.floor(s/60), sec=Math.floor(s%60); return `${m}m ${sec}s`; }
+function timeStr(ts){ try { return new Date(ts).toLocaleString(); } catch { return "—"; } }
+function secondsToMin(s){ if (!Number.isFinite(s)) return "—"; const m=Math.floor(s/60), sec=Math.floor(s%60); return `${m}m ${sec}s`; }
 function routingToUI(r){ const v=(r||"").toLowerCase(); if (v==="americas") return "NA"; return "EUW"; }
-function linkToProfile(nameTag, uiRegionGuess){
-  const base = new URL(location.href.replace(/[^/]*$/, ""));
-  const url = new URL("app.html", base);
-  url.searchParams.set("id", nameTag);
-  if (uiRegionGuess) url.searchParams.set("region", uiRegionGuess.toUpperCase());
-  return url.toString();
-}
+function linkToProfile(nameTag, uiRegionGuess){ const base = new URL(location.href.replace(/[^/]*$/, "")); const url = new URL("app.html", base); url.searchParams.set("id", nameTag); if (uiRegionGuess) url.searchParams.set("region", uiRegionGuess.toUpperCase()); return url.toString(); }
 function makeNameTag(p){ return (p.riotIdGameName && p.riotIdTagline) ? `${p.riotIdGameName}#${p.riotIdTagline}` : (p.summonerName || "Unknown"); }
 
 function normPlace(p){ return p.placement ?? p.challenges?.arenaPlacement ?? 99; }
@@ -125,12 +129,12 @@ function groupDuoTeams(parts){
   return out;
 }
 
-// Renderers
+// --- Renderers ---
 function renderSummary(match, focus){
   const info = match?.info || {};
-  const started = info.gameStartTimestamp ? timeStr(info.gameStartTimestamp) : "...";
-  const dur = info.gameDuration ? secondsToMin(info.gameDuration) : "...";
-  const q = info.queueId ?? "...";
+  const started = info.gameStartTimestamp ? timeStr(info.gameStartTimestamp) : "—";
+  const dur = info.gameDuration ? secondsToMin(info.gameDuration) : "—";
+  const q = info.queueId ?? "—";
   const myPlace = focus ? normPlace(focus) : null;
   const placeBadge = Number.isFinite(myPlace)
     ? `<span class="badge ${myPlace===1?'p1':myPlace===2?'p2':myPlace===3?'p3':'px'}">${ordinal(myPlace)}</span>` : "";
@@ -185,7 +189,7 @@ function renderTeams(match, focusId){
               .filter(Boolean)
               .map(a => {
                 const rec = lookupAug(a);
-                const title = [rec.name, rec.desc].filter(Boolean).join(" , ");
+                const title = [rec.name, rec.desc].filter(Boolean).join(" — ");
                 const icon = rec.icon ? `<img class="aug-ico" src="${rec.icon}" alt="${rec.name}" title="${title}">` : "";
                 return icon ? icon : `<span class="badge sm" title="${title}">${rec.name}</span>`;
               }).join("");
@@ -235,7 +239,7 @@ function renderTable(match, focusId){
       .filter(Boolean)
       .map(a => {
         const rec = lookupAug(a);
-        const title = [rec.name, rec.desc].filter(Boolean).join(" , ");
+        const title = [rec.name, rec.desc].filter(Boolean).join(" — ");
         return rec.icon
           ? `<img class="aug-ico" src="${rec.icon}" alt="${rec.name}" title="${title}">`
           : `<span class="badge sm" title="${title}">${rec.name}</span>`;
@@ -250,14 +254,14 @@ function renderTable(match, focusId){
       <td><span class="badge ${placeCls}">${ordinal(placement)}</span></td>
       <td>${kda}</td>
       <td>${Number(gold).toLocaleString()}</td>
-      <td>${Number.isFinite(dmg)?Number(dmg).toLocaleString():"..."}</td>
-      <td>${items || "..."}</td>
-      <td>${augments || "..."}</td>
+      <td>${Number.isFinite(dmg)?Number(dmg).toLocaleString():"—"}</td>
+      <td>${items || "—"}</td>
+      <td>${augments || "—"}</td>
     </tr>`;
   }).join("");
 }
 
-// Run
+// --- Run ---
 (async function(){
   if (!matchId){
     card.innerHTML = `<div class="muted">Missing match id.</div>`;
@@ -265,9 +269,8 @@ function renderTable(match, focusId){
   }
   if (!uiRegion) uiRegion = routingToUI(routingRegion);
 
-  const back = new URL(location.href.replace(/[^/]*$/, ""));
-  back.searchParams.set("region", uiRegion);
-  backLink.href = back.toString();
+  // back link mantém região
+  const back = new URL(location.href.replace(/[^/]*$/, "")); back.searchParams.set("region", uiRegion); backLink.href = back.toString();
 
   await Promise.all([initDDragon(), loadAugmentsFromCDragon()]);
 
