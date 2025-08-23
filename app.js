@@ -1,12 +1,11 @@
-// Arena.gg frontend — auto-fetch full history with progress
+// Arena.gg frontend — auto fetch ALL history + URL param prefill + fast worker
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
 const ARENA_QUEUE = 1700;
 
-const PAGE_SIZE = 100;          // Riot max per call
-const CHUNK_SIZE = 10;          // detail fetch chunk size
-const CHUNK_DELAY_MS = 700;     // between chunks
-const IDS_PAGE_DELAY = 300;     // gentle delay between id pages
-const MAX_AUTOPAGES = 200;      // 20k games safety cap
+const PAGE_SIZE = 100;          // Riot max
+const CHUNK_SIZE = 100;         // send up to 100 ids per /matches call (Worker now parallelizes internally)
+const IDS_PAGE_DELAY = 200;     // small delay between pages
+const CACHE_VERSION = "v5";
 
 function api(pathAndQuery){
   const base = API_BASE.replace(/\/+$/, "");
@@ -52,6 +51,7 @@ const progressWrap = document.getElementById("progress-wrap");
 const progressBar  = document.getElementById("progress-bar");
 const progressText = document.getElementById("progress-text");
 
+// Status line
 const statusBox = createStatus();
 
 // ---- State ----
@@ -67,7 +67,7 @@ let CURRENT = {
   champQuery: "",
   lastUpdated: null,
 };
-const CACHE_VERSION = "v4";
+
 const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
 
 // ---- Tabs ----
@@ -101,7 +101,6 @@ champClear.addEventListener("click", ()=>{
 // ---- Actions ----
 form.addEventListener("submit", onSearch);
 btnUpdate.addEventListener("click", () => refresh(true));
-
 matchesBox.addEventListener("click", (e)=>{
   const card = e.target.closest(".item");
   if (!card) return;
@@ -157,6 +156,20 @@ function hideProgress(){
   progressText.textContent = '';
 }
 
+// ---- URL prefill & auto-run ----
+function prefillFromURL(){
+  const u = new URL(location.href);
+  const id = u.searchParams.get('id');
+  const region = u.searchParams.get('region');
+  if (region) {
+    regionSelect.value = region.toUpperCase();
+  }
+  if (id && id.includes('#')) {
+    riotIdInput.value = id;
+    setTimeout(()=> form.dispatchEvent(new Event('submit', {cancelable:true})), 0);
+  }
+}
+
 // ---- Search / Refresh ----
 async function onSearch(e){
   e.preventDefault();
@@ -170,7 +183,6 @@ async function onSearch(e){
     const acc = await fetchJSON(api(`/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`));
     CURRENT.gameName = acc.gameName; CURRENT.tagLine = acc.tagLine; CURRENT.puuid = acc.puuid;
 
-    // try cache (useful for repeat visits)
     const cached = loadCache(acc.puuid);
     if (cached?.matches){
       Object.assign(CURRENT, { matches: cached.matches, ids: cached.ids||[], region: cached.region||null, lastUpdated: cached.updatedAt||null });
@@ -181,35 +193,32 @@ async function onSearch(e){
     }
 
     CURRENT.region = mapRegionUItoRouting(regionSelect.value);
-
-    await refresh(true); // full = auto-fetch ALL pages + details
+    await refresh(true);
   } catch(err){ console.error(err); status(err.message || "Error"); hideProgress(); }
 }
 
 async function refresh(full){
   if (!CURRENT.puuid) return;
   try{
-    // 1) Pull ALL match IDs (unknown count): show indeterminate bar
+    // 1) ALL IDs
     showIndeterminate("Fetching match IDs…");
     let allIds = [];
     let start = 0;
-    for (let page = 0; page < MAX_AUTOPAGES; page++) {
+    for (;;) {
       progressText.textContent = `Fetching match IDs… ${start}–${start + PAGE_SIZE - 1}`;
       const ids = await fetchJSON(api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`));
       if (!ids.length) break;
       allIds.push(...ids);
       start += ids.length;
-      if (ids.length < PAGE_SIZE) break; // last page
+      if (ids.length < PAGE_SIZE) break;
       await new Promise(r=>setTimeout(r, IDS_PAGE_DELAY));
     }
-
     CURRENT.ids = allIds.slice();
 
-    // 2) Fetch details for ALL IDs we don't have yet — determinate progress
+    // 2) Details — use big slices; Worker parallelizes internally
     const known = new Set(CURRENT.matches.map(m=>m.matchId));
     const toFetch = allIds.filter(id=>!known.has(id));
     const total = toFetch.length;
-
     let fetched = 0;
     showDeterminate(`Fetching match details… 0 / ${total}`, 0);
 
@@ -221,14 +230,11 @@ async function refresh(full){
       fetched += slice.length;
       const pct = total ? Math.round((100*fetched)/total) : 100;
       showDeterminate(`Fetching match details… ${Math.min(fetched,total)} / ${total}`, pct);
-
-      // live update for a nice feel
+      // live UI
       renderHistory(dedupeById(CURRENT.matches.concat(collected)).sort((a,b)=>b.gameStart-a.gameStart));
-
-      if (i + CHUNK_SIZE < toFetch.length) await new Promise(r=>setTimeout(r, CHUNK_DELAY_MS));
     }
 
-    // 3) Merge, cache, render
+    // 3) Merge + cache + render
     CURRENT.matches = dedupeById(collected.concat(CURRENT.matches)).sort((a,b)=>b.gameStart-a.gameStart);
 
     const payload = { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() };
@@ -248,7 +254,7 @@ async function refresh(full){
 
 function dedupeById(list){ const seen=new Set(); const out=[]; for (const m of list){ if(!m?.matchId||seen.has(m.matchId)) continue; seen.add(m.matchId); out.push(m);} return out; }
 
-// ---- Render ----
+// ---- Renderers (same as before)
 function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); renderDuos(); }
 
 function renderKPIs(){
@@ -268,7 +274,6 @@ function renderKPIs(){
 }
 
 function renderSidebar(){
-  // Wins checklist — ONLY champs you've won with
   const byChamp = groupBy(CURRENT.matches, m=>m.championName);
   const rows = Object.keys(byChamp)
     .filter(name => byChamp[name].some(m=>m.placement===1))
@@ -279,7 +284,6 @@ function renderSidebar(){
       </div>`).join("");
   winsChecklist.innerHTML = rows || `<div class="muted small">Get a 1st to start filling this up.</div>`;
 
-  // Most attempts for a win
   const progress = buildProgress(CURRENT.matches);
   const hardest = Object.values(progress)
     .filter(p=>p.completed)
@@ -289,7 +293,6 @@ function renderSidebar(){
     `<span class="tag"><img src="${champIcon(p.name)}" width="16" height="16" style="border-radius:4px;border:1px solid var(--border)"> ${p.name} · ${p.attemptsUntilFirst}</span>`
   ).join("") : `<div class="muted small">No wins yet.</div>`;
 
-  // Placement chart
   const counts = Array(8).fill(0);
   for (const m of CURRENT.matches){ const p=Number(m.placement); if (p>=1 && p<=8) counts[p-1]++; }
   if (placementsRange) placementsRange.textContent = `last ${CURRENT.matches.length} games`;
@@ -298,7 +301,6 @@ function renderSidebar(){
 
 function renderHistory(forcedList){
   const listAll = (forcedList || CURRENT.matches).slice();
-
   let list = listAll;
   if (CURRENT.filter === "wins") list = listAll.filter(m=>m.placement===1);
   else if (CURRENT.filter === "neverwon") {
@@ -351,28 +353,25 @@ function renderSynergy(){
   }
 
   synergyTableBody.innerHTML = rows.length
-    ? rows
-        .sort((a,b)=> b.wr - a.wr)
-        .map(x=>`
-          <tr>
-            <td class="row"><img src="${champIcon(x.ally)}" width="22" height="22" style="border-radius:6px;border:1px solid var(--border)"> ${x.ally}</td>
-            <td>${x.games}</td><td>${x.wins}</td><td>${x.wr}%</td><td>${x.avg}</td>
-          </tr>
-        `).join("")
+    ? rows.sort((a,b)=> b.wr - a.wr).map(x=>`
+        <tr>
+          <td class="row"><img src="${champIcon(x.ally)}" width="22" height="22" style="border-radius:6px;border:1px solid var(--border)"> ${x.ally}</td>
+          <td>${x.games}</td><td>${x.wins}</td><td>${x.wr}%</td><td>${x.avg}</td>
+        </tr>`).join("")
     : `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
 }
 
 // Best Duo Partners (by player; group by allyPuuid)
 function renderDuos(){
-  const agg = new Map();            // puuid -> stats
-  const nameMap = new Map();        // puuid -> last seen display name
+  const agg = new Map();  // puuid -> stats
+  const nameMap = new Map();
 
   for (const m of CURRENT.matches){
     const pid = m.allyPuuid || null;
     const display = m.allyName || "Unknown";
     if (pid) nameMap.set(pid, display);
 
-    const key = pid || `name:${display}`; // fallback for very old rows
+    const key = pid || `name:${display}`;
     const a = agg.get(key) || { games:0, wins:0, sumPlace:0, puuid: pid, display };
     a.games++; a.wins += (m.placement===1 ? 1 : 0); a.sumPlace += Number(m.placement)||0;
     agg.set(key, a);
@@ -393,8 +392,7 @@ function renderDuos(){
           <td>${x.wins}</td>
           <td>${x.wr}%</td>
           <td>${x.avg}</td>
-        </tr>
-      `).join("")
+        </tr>`).join("")
     : `<tr><td colspan="5" class="muted">No duo partners found.</td></tr>`;
 }
 
@@ -427,7 +425,6 @@ function drawPlacementBars(canvas, counts){
   const W=canvas.width, H=canvas.height;
   ctx.clearRect(0,0,W,H);
 
-  // grid
   ctx.strokeStyle = "#2a3340"; ctx.lineWidth = 1;
   const max = Math.max(1, ...counts);
   const top = Math.ceil(max / 2) * 2;
@@ -438,9 +435,7 @@ function drawPlacementBars(canvas, counts){
     ctx.fillStyle = "#7f8c8d"; ctx.font="12px system-ui"; ctx.fillText(String(y), 10, yy+4);
   }
 
-  // vivid colors
   const colors = ["#ffd95e","#6eb4ff","#ffb26b","#b9c2cc","#b9c2cc","#b9c2cc","#b9c2cc","#b9c2cc"];
-
   const n = counts.length;
   const slotW = (W-60)/n;
   const bw = slotW * 0.7;
@@ -459,3 +454,6 @@ function drawPlacementBars(canvas, counts){
     ctx.fillText(`${i+1}${["st","nd","rd"][i]||"th"}`, x + bw/2 - 10, H - 4);
   }
 }
+
+// kick off: prefill from ?id=&region=
+prefillFromURL();
