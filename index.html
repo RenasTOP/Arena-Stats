@@ -3,129 +3,52 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Arena.gg</title>
+  <title>LeagueArena.gg — Home</title>
   <link id="css" rel="stylesheet" href="styles.css">
+  <link rel="icon" href="logo.svg">
 </head>
-<body>
-  <header class="topbar">
+<body class="home-body">
+  <header class="topbar silent">
     <div class="container">
-      <h1 class="brand">Arena.gg</h1>
+      <h1 class="brand"><img src="logo.svg" alt="LeagueArena.gg" class="brand-logo-small" /></h1>
+    </div>
+  </header>
 
-      <nav class="tabs" id="tabs">
-        <button data-tab="matches" class="active">Matches</button>
-        <button data-tab="synergy">Duo Synergies</button>
-      </nav>
+  <main class="hero">
+    <div class="hero-inner">
+      <img src="logo.svg" alt="LeagueArena.gg" class="logo-hero" />
+      <p class="tagline">Arena stats, win tracking, and duo insights.</p>
 
-      <form id="search-form" class="search">
-        <select id="region-select" title="Region">
+      <form id="home-search" class="hero-search">
+        <select id="home-region" title="Region">
           <option value="na" selected>NA</option>
           <option value="euw">EUW</option>
           <option value="eune">EUNE</option>
         </select>
-        <input id="riotid" placeholder="Riot ID (Name#TAG)" />
+        <input id="home-riotid" placeholder="Riot ID (Name#TAG)" autocomplete="off" />
         <button type="submit">Search</button>
-        <button type="button" id="btn-update" class="ghost">Update</button>
       </form>
+
+      <small class="muted">Powered by Riot Games API • Icons by Data Dragon</small>
     </div>
-  </header>
-
-  <main class="container layout">
-    <!-- Left sidebar -->
-    <aside class="sidebar">
-      <section class="card">
-        <h3>Wins checklist</h3>
-        <small class="muted">✓ = 1st place achieved</small>
-        <div id="wins-checklist" class="checklist"></div>
-      </section>
-
-      <section class="card">
-        <h3>Most attempts for a win</h3>
-        <div id="hardest-list" class="tags"></div>
-      </section>
-
-      <section class="card">
-        <div class="section-title">
-          <h3>Placements</h3>
-          <small class="muted" id="placements-range">last 0 games</small>
-        </div>
-        <canvas id="placements-canvas" width="260" height="220"></canvas>
-      </section>
-
-      <div class="muted small" id="last-updated"></div>
-    </aside>
-
-    <!-- Right content -->
-    <section class="content">
-      <!-- MATCHES (KPIs + Filters + History) -->
-      <div id="tab-matches" class="tab active">
-        <section class="kpis card" id="kpis"></section>
-
-        <div class="toolbar">
-          <div class="filters segmented">
-            <button data-filter="all" class="active">All</button>
-            <button data-filter="wins">1st place</button>
-            <button data-filter="neverwon">Never won</button>
-          </div>
-
-          <div class="champ-filter">
-            <label for="champ-input" class="muted small">Champion</label>
-            <div class="combo">
-              <input id="champ-input" list="champ-datalist" placeholder="Type a champion…" />
-              <button id="champ-clear" class="ghost" type="button" title="Clear">✕</button>
-              <datalist id="champ-datalist"></datalist>
-            </div>
-          </div>
-        </div>
-
-        <section id="matches" class="grid"></section>
-        <div id="more" class="more">
-          <button id="btn-more" class="ghost">Load 100 more</button>
-        </div>
-      </div>
-
-      <!-- SYNERGY -->
-      <div id="tab-synergy" class="tab">
-        <section class="card">
-          <h3>Duo synergies (your ally pair)</h3>
-
-          <div class="duo-kpis">
-            <div class="duo-tile" id="best-duo">
-              <div class="duo-title">Best duo</div>
-              <div class="duo-value muted">—</div>
-            </div>
-            <div class="duo-tile" id="common-duo">
-              <div class="duo-title">Most common duo</div>
-              <div class="duo-value muted">—</div>
-            </div>
-          </div>
-
-          <table class="table" id="synergy-table">
-            <thead>
-              <tr>
-                <th>Ally champion</th>
-                <th>Games</th>
-                <th>Wins</th>
-                <th>Win %</th>
-                <th>Avg place</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </section>
-      </div>
-    </section>
   </main>
 
-  <footer class="footer">
-    <div class="container muted">Powered by Riot Games API, icons by Data Dragon. Made by @renas2g</div>
+  <footer class="footer shallow">
+    <div class="container muted">© LeagueArena.gg</div>
   </footer>
 
-  <!-- Auto cache-bust loader -->
-  <script type="module">
-    const ver = new Date(document.lastModified).getTime();
-    const css = document.getElementById('css');
-    if (css) css.href = `styles.css?v=${ver}`;
-    import(`./app.js?v=${ver}`);
+  <script>
+    // redirect to app.html with params
+    document.getElementById('home-search').addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const id = document.getElementById('home-riotid').value.trim();
+      const region = document.getElementById('home-region').value;
+      if (!id.includes('#')) { alert('Use Name#TAG'); return; }
+      const u = new URL('app.html', location.href);
+      u.searchParams.set('id', id);
+      u.searchParams.set('region', region);
+      location.href = u.toString();
+    });
   </script>
 </body>
 </html>
