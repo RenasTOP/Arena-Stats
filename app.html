@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LeagueArena.gg — Profile</title>
-  <link rel="stylesheet" href="styles.css?v=build11" />
+  <link rel="stylesheet" href="styles.css?v=build12" />
 </head>
 <body>
   <header class="topbar">
@@ -21,18 +21,10 @@
           <option selected>EUW</option>
           <option>EUNE</option>
         </select>
-
-        <!-- Novo: intervalo de histórico -->
-        <select id="range-select" title="History range">
-          <option value="arena4" selected>Since Arena 4.0</option>
-          <option value="90d">Last 90 days</option>
-          <option value="180d">Last 180 days</option>
-          <option value="all">All history</option>
-        </select>
-
         <input id="riotid" placeholder="Riot ID (Name#TAG)" />
         <button type="submit">Search</button>
         <button type="button" id="btn-update" class="ghost">Update</button>
+        <button type="button" id="btn-pin" class="ghost" title="Pin/Unpin this profile">☆ Pin</button>
       </form>
     </div>
   </header>
@@ -45,6 +37,20 @@
   <!-- Só fica visível quando o fetch completo termina -->
   <main class="container layout" id="main-layout" hidden>
     <aside class="sidebar">
+      <section class="card">
+        <h3>Recentes & Fixos</h3>
+        <div class="quicklists">
+          <div>
+            <div class="muted small">Fixos</div>
+            <div id="pins-list" class="links-list"></div>
+          </div>
+          <div>
+            <div class="muted small">Recentes</div>
+            <div id="recents-list" class="links-list"></div>
+          </div>
+        </div>
+      </section>
+
       <section class="card">
         <h3>Wins checklist</h3>
         <small class="muted">✓ = 1st place achieved</small>
@@ -126,6 +132,6 @@
     <div class="container muted">Powered by Riot Games API • Icons by Data Dragon</div>
   </footer>
 
-  <script type="module" src="app.js?v=build11"></script>
+  <script type="module" src="app.js?v=build12"></script>
 </body>
 </html>
