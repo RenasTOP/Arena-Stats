@@ -1,9 +1,9 @@
-// Arena.gg frontend — safe 10-id chunks to avoid Cloudflare subrequest limits
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
+// Arena.gg frontend, safe 10-id chunks para evitar limites de subrequests da Cloudflare
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // sem slash final
 const ARENA_QUEUE = 1700;
 
-const PAGE_SIZE = 100;      // Riot max for /match-ids
-const CHUNK_SIZE = 10;      // <= worker MAX_IDS_PER_REQ (12) to stay WELL under subrequest cap
+const PAGE_SIZE = 100;      // máximo Riot para /match-ids
+const CHUNK_SIZE = 10;      // <= MAX_IDS_PER_REQ do worker para ficar tranquilo
 const IDS_PAGE_DELAY = 200;
 const CACHE_VERSION = "v7";
 
@@ -107,6 +107,7 @@ matchesBox.addEventListener("click", (e)=>{
   url.searchParams.set("id", id);
   url.searchParams.set("puuid", CURRENT.puuid || "");
   url.searchParams.set("region", CURRENT.region || "");
+  url.searchParams.set("regionUI", regionSelect.value || "EUW"); // passa a região UI para os links de nomes
   location.href = url.toString();
 });
 
@@ -138,7 +139,7 @@ function showIndeterminate(msg){ progressWrap.hidden=false; progressBar.classLis
 function showDeterminate(msg,pct){ progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
 function hideProgress(){ progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
 
-// ---- URL prefill & auto-run ----
+// ---- URL prefill e auto-run ----
 function prefillFromURL(){
   const u = new URL(location.href);
   const id = u.searchParams.get('id');
@@ -150,7 +151,7 @@ function prefillFromURL(){
   }
 }
 
-// ---- Search / Refresh ----
+// ---- Search e Refresh ----
 async function onSearch(e){
   e.preventDefault();
   const raw = riotIdInput.value.trim();
@@ -180,7 +181,7 @@ async function onSearch(e){
 async function refresh(full){
   if (!CURRENT.puuid) return;
   try{
-    // 1) Get ALL Ids
+    // 1) Buscar todos os IDs
     showIndeterminate("Fetching match IDs…");
     let allIds = [];
     let start = 0;
@@ -195,7 +196,7 @@ async function refresh(full){
     }
     CURRENT.ids = allIds.slice();
 
-    // 2) Fetch details in safe 10-id chunks
+    // 2) Detalhes em chunks de 10
     const known = new Set(CURRENT.matches.map(m=>m.matchId));
     const toFetch = allIds.filter(id=>!known.has(id));
     const total = toFetch.length;
@@ -213,7 +214,7 @@ async function refresh(full){
       renderHistory(dedupeById(CURRENT.matches.concat(collected)).sort((a,b)=>b.gameStart-a.gameStart));
     }
 
-    // 3) Merge + cache + render
+    // 3) Merge, cache e render
     CURRENT.matches = dedupeById(collected.concat(CURRENT.matches)).sort((a,b)=>b.gameStart-a.gameStart);
 
     const payload = { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() };
@@ -340,7 +341,7 @@ function renderSynergy(){
     : `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
 }
 
-// Best Duo Partners (by player; group by allyPuuid)
+// Best Duo Partners, por jogador, agrupa por allyPuuid
 function renderDuos(){
   const agg = new Map();
   const nameMap = new Map();
