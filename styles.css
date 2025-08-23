@@ -102,3 +102,41 @@ body.home{display:grid;place-items:center;min-height:100vh;background:radial-gra
 .logo{width:min(560px,90vw);display:block;margin:0 auto 12px}
 .tagline{color:#b7c2cb;margin:6px 0 16px}
 .home-search{display:flex;gap:8px;justify-content:center;max-width:720px;margin:0 auto 14px}
+
+/* ===== Match page polish ===== */
+.match-summary{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+}
+.match-summary .pill{
+  background:#0e131a; border:1px solid var(--border); padding:8px 12px; border-radius:999px;
+}
+.link{ color:#9ecbff; text-decoration:none; }
+.link:hover{ text-decoration:underline; }
+
+.teams-grid{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px;
+}
+.team-card{ border:1px solid var(--border); border-radius:12px; background:#0e131a; }
+.team-head{ padding:10px 12px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between }
+.team-rank{ font-weight:700; }
+.team-body{ padding:8px; display:flex; flex-direction:column; gap:8px; }
+
+.player{ display:block; border:1px solid var(--border); border-radius:10px; padding:8px; text-decoration:none; color:inherit; background:#0f141b; }
+.player:hover{ background:#121a24; }
+.player.me{ outline:1px solid #2db06b; }
+.player.ally{ outline:1px dashed #2db06b; }
+
+.player .row{ display:flex; gap:8px; align-items:flex-start }
+.player .col{ flex:1; min-width:0 }
+.player .pname{ font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.player .champ-ico{ width:28px; height:28px; border-radius:6px; border:1px solid var(--border) }
+.player .tiny{ font-size:.85rem }
+.player .items img{ width:20px; height:20px; border-radius:4px; border:1px solid var(--border); margin-right:4px }
+.player .augments{ margin-top:4px }
+
+.place{ font-weight:700; white-space:nowrap; margin-left:8px }
+.legend{ display:flex; gap:10px; align-items:center }
+.legend-chip{ width:14px; height:14px; display:inline-block; border-radius:4px; border:1px solid var(--border); margin-right:4px; vertical-align:middle }
+.legend-chip.me{ background:#163320 }
+.legend-chip.ally{ background:#10252d }
+
