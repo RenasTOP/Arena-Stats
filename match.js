@@ -118,7 +118,14 @@ function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) r
 function timeStr(ts){ try { return new Date(ts).toLocaleString(); } catch { return "—"; } }
 function secondsToMin(s){ if (!Number.isFinite(s)) return "—"; const m=Math.floor(s/60), sec=Math.floor(s%60); return `${m}m ${sec}s`; }
 function routingToUI(r){ const v=(r||"").toLowerCase(); if (v==="americas") return "NA"; return "EUW"; }
-function linkToProfile(nameTag, uiRegionGuess){ const base = new URL(location.href.replace(/[^/]*$/, "")); const url = new URL("index.html", base); url.searchParams.set("id", nameTag); if (uiRegionGuess) url.searchParams.set("region", uiRegionGuess.toUpperCase()); return url.toString(); }
+function linkToProfile(nameTag, uiRegionGuess){
+  const base = new URL(location.href.replace(/[^/]*$/, ""));
+  const url = new URL("app.html", base);
+  url.searchParams.set("id", nameTag);
+  if (uiRegionGuess) url.searchParams.set("region", uiRegionGuess.toUpperCase());
+  return url.toString();
+}
+
 function makeNameTag(p){ return (p.riotIdGameName && p.riotIdTagline) ? `${p.riotIdGameName}#${p.riotIdTagline}` : (p.summonerName || "Unknown"); }
 
 function normPlace(p){ return p.placement ?? p.challenges?.arenaPlacement ?? 99; }
