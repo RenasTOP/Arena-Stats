@@ -1,10 +1,10 @@
-// Arena.gg frontend — auto fetch ALL history + URL param prefill + fast worker
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
+// Arena.gg frontend — tabs fixed + fast fetch (same API)
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
 const ARENA_QUEUE = 1700;
 
-const PAGE_SIZE = 100;          // Riot max
-const CHUNK_SIZE = 100;         // send up to 100 ids per /matches call (Worker now parallelizes internally)
-const IDS_PAGE_DELAY = 200;     // small delay between pages
+const PAGE_SIZE = 100;
+const CHUNK_SIZE = 100;
+const IDS_PAGE_DELAY = 200;
 const CACHE_VERSION = "v5";
 
 function api(pathAndQuery){
@@ -70,14 +70,24 @@ let CURRENT = {
 
 const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
 
-// ---- Tabs ----
-tabs.addEventListener("click", (e)=>{
-  const btn = e.target.closest("button"); if (!btn) return;
-  [...tabs.children].forEach(b=>b.classList.remove("active"));
-  btn.classList.add("active");
-  const key = btn.dataset.tab;
-  for (const [k, el] of Object.entries(tabViews)) el.classList.toggle("active", k===key);
-});
+// ---- Tabs (robust) ----
+if (tabs) {
+  tabs.addEventListener("click", (e)=>{
+    const btn = e.target.closest("button"); if (!btn) return;
+    const key = btn.dataset.tab;
+    // update button styles + aria
+    [...tabs.querySelectorAll("button")].forEach(b=>{
+      const active = b === btn;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    // show only the chosen tab pane
+    for (const [k, el] of Object.entries(tabViews)) {
+      if (!el) continue;
+      el.classList.toggle("active", k === key);
+    }
+  });
+}
 
 // ---- Filters ----
 filters.addEventListener("click", (e)=>{
@@ -137,33 +147,19 @@ function createStatus(){ const el=document.createElement("div"); el.id="status";
 function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
 
 // ---- Progress helpers ----
-function showIndeterminate(msg){
-  progressWrap.hidden = false;
-  progressBar.classList.add('indeterminate');
-  progressBar.style.width = '100%';
-  progressText.textContent = msg || 'Working…';
-}
-function showDeterminate(msg, pct){
-  progressWrap.hidden = false;
-  progressBar.classList.remove('indeterminate');
-  progressBar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
-  progressText.textContent = msg || '';
-}
-function hideProgress(){
-  progressWrap.hidden = true;
-  progressBar.classList.remove('indeterminate');
-  progressBar.style.width = '0%';
-  progressText.textContent = '';
-}
+const progressWrap = document.getElementById("progress-wrap");
+const progressBar  = document.getElementById("progress-bar");
+const progressText = document.getElementById("progress-text");
+function showIndeterminate(msg){ if(!progressWrap)return; progressWrap.hidden=false; progressBar.classList.add('indeterminate'); progressBar.style.width='100%'; progressText.textContent=msg||'Working…'; }
+function showDeterminate(msg,pct){ if(!progressWrap)return; progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
+function hideProgress(){ if(!progressWrap)return; progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
 
 // ---- URL prefill & auto-run ----
 function prefillFromURL(){
   const u = new URL(location.href);
   const id = u.searchParams.get('id');
   const region = u.searchParams.get('region');
-  if (region) {
-    regionSelect.value = region.toUpperCase();
-  }
+  if (region) regionSelect.value = region.toUpperCase();
   if (id && id.includes('#')) {
     riotIdInput.value = id;
     setTimeout(()=> form.dispatchEvent(new Event('submit', {cancelable:true})), 0);
@@ -200,7 +196,6 @@ async function onSearch(e){
 async function refresh(full){
   if (!CURRENT.puuid) return;
   try{
-    // 1) ALL IDs
     showIndeterminate("Fetching match IDs…");
     let allIds = [];
     let start = 0;
@@ -215,7 +210,6 @@ async function refresh(full){
     }
     CURRENT.ids = allIds.slice();
 
-    // 2) Details — use big slices; Worker parallelizes internally
     const known = new Set(CURRENT.matches.map(m=>m.matchId));
     const toFetch = allIds.filter(id=>!known.has(id));
     const total = toFetch.length;
@@ -230,11 +224,9 @@ async function refresh(full){
       fetched += slice.length;
       const pct = total ? Math.round((100*fetched)/total) : 100;
       showDeterminate(`Fetching match details… ${Math.min(fetched,total)} / ${total}`, pct);
-      // live UI
       renderHistory(dedupeById(CURRENT.matches.concat(collected)).sort((a,b)=>b.gameStart-a.gameStart));
     }
 
-    // 3) Merge + cache + render
     CURRENT.matches = dedupeById(collected.concat(CURRENT.matches)).sort((a,b)=>b.gameStart-a.gameStart);
 
     const payload = { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() };
@@ -254,7 +246,7 @@ async function refresh(full){
 
 function dedupeById(list){ const seen=new Set(); const out=[]; for (const m of list){ if(!m?.matchId||seen.has(m.matchId)) continue; seen.add(m.matchId); out.push(m);} return out; }
 
-// ---- Renderers (same as before)
+// ---- Render
 function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); renderDuos(); }
 
 function renderKPIs(){
@@ -396,7 +388,7 @@ function renderDuos(){
     : `<tr><td colspan="5" class="muted">No duo partners found.</td></tr>`;
 }
 
-// ---- Utils ----
+// ---- Utils
 function buildProgress(matches){
   const byChamp = groupBy(matches, m=>m.championName);
   const out = {};
@@ -455,5 +447,5 @@ function drawPlacementBars(canvas, counts){
   }
 }
 
-// kick off: prefill from ?id=&region=
+// kick off
 prefillFromURL();
