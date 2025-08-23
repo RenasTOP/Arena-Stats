@@ -1,20 +1,20 @@
-// Match details, estilo LoG com nomes clicáveis para o app.html e augments vindos do CommunityDragon
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // sem slash final
+// Match details, LoG-like, nomes clicáveis e augments via CommunityDragon
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
 
-// --- Params ---
+// Params
 const params = new URLSearchParams(location.search);
 const matchId = params.get("id");
 const focusPuuid = params.get("puuid");
-const routingRegion = params.get("region") || ""; // americas ou europe
-let uiRegion = params.get("regionUI") || "";      // NA, EUW, EUNE, etc
+const routingRegion = params.get("region") || "";
+let uiRegion = params.get("regionUI") || "";
 
-// --- DOM ---
+// DOM
 const backLink = document.getElementById("back-link");
 const card = document.getElementById("match-card");
 const teamsWrap = document.getElementById("teams");
 const tbody = document.querySelector("#match-table tbody");
 
-// --- DDragon, items e champs ---
+// DDragon
 let DD_VERSION = "15.16.1";
 const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Khazix", VelKoz:"Velkoz", ChoGath:"Chogath", KaiSa:"Kaisa", LeBlanc:"Leblanc", DrMundo:"DrMundo", Nunu:"Nunu", Renata:"Renata", RekSai:"RekSai", KogMaw:"KogMaw", BelVeth:"Belveth", TahmKench:"TahmKench" };
 const ITEM_DB = { byId:{} };
@@ -34,19 +34,20 @@ async function initDDragon(){
   } catch {}
 }
 
-// --- CommunityDragon Augments ---
+// CommunityDragon Augments
 const CDRAGON_BASE = "https://raw.communitydragon.org/latest";
 const AUG_DB = { byId: new Map(), byKey: new Map() };
 
-// Tenta várias fontes conhecidas de augments
+// Múltiplas fontes conhecidas de augments para cherry, robusto
 async function loadAugmentsFromCDragon(){
-  const candidates = [
+  const sources = [
+    `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/cherry-augments.json`,
+    `${CDRAGON_BASE}/cdragon/arena/en_us.json`,
     `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/arena-augments.json`,
     `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/augments.json`,
     `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/perks.json`
   ];
-
-  for (const url of candidates){
+  for (const url of sources){
     try{
       const r = await fetch(url, { cache: "no-store" });
       if (!r.ok) continue;
@@ -59,13 +60,13 @@ async function loadAugmentsFromCDragon(){
 function ingestAugments(data){
   const arr = Array.isArray(data) ? data : Object.values(data || {});
   for (const a of arr){
-    let id = a.id ?? a.augmentId ?? a.gameModifierId ?? null;
-    if (typeof id === "string" && /^\d+$/.test(id)) id = Number(id); // normaliza ids string numéricas
+    let id = a.id ?? a.augmentId ?? a.gameModifierId ?? a.tftId ?? null;
+    if (typeof id === "string" && /^\d+$/.test(id)) id = Number(id);
 
-    const key  = a.nameId ?? a.tftId ?? a.apiName ?? a.inventoryIcon ?? a.icon ?? a.contentId ?? null;
+    const key  = a.nameId ?? a.apiName ?? a.inventoryIcon ?? a.icon ?? a.contentId ?? null;
     const name = a.name ?? a.localizedName ?? a.displayName ?? a.title ?? null;
     const desc = a.desc ?? a.tooltip ?? a.description ?? a.longDesc ?? null;
-    const iconPath = a.iconPath ?? a.iconLargePath ?? a.icon ?? a.augmentIcon ?? null;
+    const iconPath = a.iconPath ?? a.iconLargePath ?? a.icon ?? a.augmentIcon ?? a.inventoryIcon ?? null;
     const icon = iconPath ? (CDRAGON_BASE + (iconPath.startsWith("/") ? iconPath : "/" + iconPath)).toLowerCase() : null;
 
     const rec = { id, key, name, desc, icon };
@@ -84,7 +85,6 @@ function prettifyAugString(raw){
 
 function lookupAug(raw){
   if (raw == null) return null;
-
   const asNum = Number(raw);
   if (Number.isFinite(asNum) && AUG_DB.byId.size){
     const rec = AUG_DB.byId.get(asNum);
@@ -97,7 +97,7 @@ function lookupAug(raw){
   return { name: typeof raw === "string" ? prettifyAugString(raw) : `Augment #${raw}` };
 }
 
-// --- Utils ---
+// Utils
 function api(pathAndQuery){
   const base = API_BASE.replace(/\/+$/, "");
   const path = pathAndQuery.startsWith("/") ? pathAndQuery : `/${pathAndQuery}`;
@@ -105,12 +105,12 @@ function api(pathAndQuery){
 }
 async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }
 function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "?"; return `${n}th`; }
-function timeStr(ts){ try { return new Date(ts).toLocaleString(); } catch { return "—"; } }
-function secondsToMin(s){ if (!Number.isFinite(s)) return "—"; const m=Math.floor(s/60), sec=Math.floor(s%60); return `${m}m ${sec}s`; }
+function timeStr(ts){ try { return new Date(ts).toLocaleString(); } catch { return "..."; } }
+function secondsToMin(s){ if (!Number.isFinite(s)) return "..."; const m=Math.floor(s/60), sec=Math.floor(s%60); return `${m}m ${sec}s`; }
 function routingToUI(r){ const v=(r||"").toLowerCase(); if (v==="americas") return "NA"; return "EUW"; }
 function linkToProfile(nameTag, uiRegionGuess){
   const base = new URL(location.href.replace(/[^/]*$/, ""));
-  const url = new URL("app.html", base); // agora abre diretamente o app
+  const url = new URL("app.html", base);
   url.searchParams.set("id", nameTag);
   if (uiRegionGuess) url.searchParams.set("region", uiRegionGuess.toUpperCase());
   return url.toString();
@@ -125,12 +125,12 @@ function groupDuoTeams(parts){
   return out;
 }
 
-// --- Renderers ---
+// Renderers
 function renderSummary(match, focus){
   const info = match?.info || {};
-  const started = info.gameStartTimestamp ? timeStr(info.gameStartTimestamp) : "—";
-  const dur = info.gameDuration ? secondsToMin(info.gameDuration) : "—";
-  const q = info.queueId ?? "—";
+  const started = info.gameStartTimestamp ? timeStr(info.gameStartTimestamp) : "...";
+  const dur = info.gameDuration ? secondsToMin(info.gameDuration) : "...";
+  const q = info.queueId ?? "...";
   const myPlace = focus ? normPlace(focus) : null;
   const placeBadge = Number.isFinite(myPlace)
     ? `<span class="badge ${myPlace===1?'p1':myPlace===2?'p2':myPlace===3?'p3':'px'}">${ordinal(myPlace)}</span>` : "";
@@ -250,14 +250,14 @@ function renderTable(match, focusId){
       <td><span class="badge ${placeCls}">${ordinal(placement)}</span></td>
       <td>${kda}</td>
       <td>${Number(gold).toLocaleString()}</td>
-      <td>${Number.isFinite(dmg)?Number(dmg).toLocaleString():"—"}</td>
-      <td>${items || "—"}</td>
-      <td>${augments || "—"}</td>
+      <td>${Number.isFinite(dmg)?Number(dmg).toLocaleString():"..."}</td>
+      <td>${items || "..."}</td>
+      <td>${augments || "..."}</td>
     </tr>`;
   }).join("");
 }
 
-// --- Run ---
+// Run
 (async function(){
   if (!matchId){
     card.innerHTML = `<div class="muted">Missing match id.</div>`;
@@ -265,7 +265,6 @@ function renderTable(match, focusId){
   }
   if (!uiRegion) uiRegion = routingToUI(routingRegion);
 
-  // botão Back mantém a região
   const back = new URL(location.href.replace(/[^/]*$/, ""));
   back.searchParams.set("region", uiRegion);
   backLink.href = back.toString();
