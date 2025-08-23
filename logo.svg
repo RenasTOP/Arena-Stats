@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="640" height="200" viewBox="0 0 640 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#59e390"/>
+      <stop offset="100%" stop-color="#2ea043"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7dd3ff"/>
+      <stop offset="100%" stop-color="#4aa3ff"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background transparent -->
+
+  <!-- Shield -->
+  <g transform="translate(40,40)">
+    <path d="M60 0 L120 20 L120 82 Q90 115 60 140 Q30 115 0 82 L0 20 Z"
+          fill="#0f141b" stroke="#2d333b" stroke-width="2"/>
+    <path d="M60 10 L108 26 L108 78 Q86 102 60 122 Q34 102 12 78 L12 26 Z"
+          fill="url(#g2)" opacity="0.18"/>
+    <!-- Spark / star -->
+    <g transform="translate(60,50)" filter="url(#glow)">
+      <path d="M0 -18 L4 -4 L18 0 L4 4 L0 18 L-4 4 L-18 0 L-4 -4 Z" fill="url(#g1)"/>
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <g transform="translate(190,110)">
+    <text font-family="Inter, Segoe UI, system-ui, sans-serif" font-weight="800" font-size="48"
+          fill="url(#g1)" letter-spacing="1px">LEAGUEARENA</text>
+    <text x="415" font-family="Inter, Segoe UI, system-ui, sans-serif" font-weight="800" font-size="48"
+          fill="#cfd9df">.GG</text>
+    <rect x="-4" y="18" width="420" height="5" rx="2.5" fill="url(#g1)" opacity="0.35"/>
+  </g>
+</svg>
