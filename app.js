@@ -1,4 +1,4 @@
-// Arena.gg frontend (tabs + search + paging + sidebar + synergy)
+// Arena.gg frontend (Matches + Synergy + Best Duo Partners)
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
 const ARENA_QUEUE = 1700;
 
@@ -17,11 +17,14 @@ const tabs = document.getElementById("tabs");
 const tabViews = {
   matches: document.getElementById("tab-matches"),
   synergy: document.getElementById("tab-synergy"),
+  duos:    document.getElementById("tab-duos"),   // NEW
 };
+
 const form = document.getElementById("search-form");
 const riotIdInput = document.getElementById("riotid");
 const regionSelect = document.getElementById("region-select");
 const btnUpdate = document.getElementById("btn-update");
+
 const kpisBox = document.getElementById("kpis");
 const matchesBox = document.getElementById("matches");
 const btnMore = document.getElementById("btn-more");
@@ -38,8 +41,13 @@ const lastUpdatedEl = document.getElementById("last-updated");
 
 const filters = document.querySelector("#tab-matches .filters");
 const synergyTableBody = document.querySelector("#synergy-table tbody");
-const bestDuoEl = document.getElementById("best-duo").querySelector(".duo-value");
-const commonDuoEl = document.getElementById("common-duo").querySelector(".duo-value");
+
+// NEW: Best Duo Partners table body
+const duoTableBody = document.querySelector("#duo-table tbody");
+
+const bestDuoEl = document.getElementById("best-duo")?.querySelector(".duo-value");
+const commonDuoEl = document.getElementById("common-duo")?.querySelector(".duo-value");
+
 const statusBox = createStatus();
 
 // ---- State ----
@@ -48,12 +56,12 @@ const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Kha
 
 let CURRENT = {
   gameName: "", tagLine: "",
-  puuid: null, region: "europe", // default to EUW routing unless UI says otherwise
+  puuid: null, region: "europe",
   matches: [],
   ids: [],
   nextStart: 0,
   filter: "all",
-  champQuery: "", // from typeable input
+  champQuery: "",
   lastUpdated: null,
 };
 const cacheKey = (puuid)=>`arena_cache_v1:${puuid}`;
@@ -76,7 +84,6 @@ filters.addEventListener("click", (e)=>{
   renderHistory();
 });
 
-// typeable champion filter
 champInput.addEventListener("input", ()=>{
   CURRENT.champQuery = (champInput.value || "").trim();
   renderHistory();
@@ -96,7 +103,7 @@ matchesBox.addEventListener("click", (e)=>{
   const card = e.target.closest(".item");
   if (!card) return;
   const id = card.dataset.id;
-  const base = new URL(location.href.replace(/[^/]*$/, "")); // relative to current dir
+  const base = new URL(location.href.replace(/[^/]*$/, ""));
   const url = new URL("match.html", base);
   url.searchParams.set("id", id);
   url.searchParams.set("puuid", CURRENT.puuid || "");
@@ -125,13 +132,7 @@ async function initDDragon(){
 function loadCache(puuid){ try { return JSON.parse(localStorage.getItem(cacheKey(puuid))||"null"); } catch { return null; } }
 function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
 function createStatus(){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; document.body.prepend(el); return el; }
-
-// map UI region to Riot routing region
-function mapRegion(ui){
-  if (ui === "na") return "americas";
-  if (ui === "euw" || ui === "eune") return "europe";
-  return "europe";
-}
+function mapRegion(ui){ if (ui==="na") return "americas"; return "europe"; }
 
 // ---- Search / Refresh ----
 async function onSearch(e){
@@ -154,7 +155,6 @@ async function onSearch(e){
       Object.assign(CURRENT, { matches: [], ids: [], nextStart: 0, region: null, lastUpdated: null });
     }
 
-    // Region from UI (NA/EUW/EUNE)
     CURRENT.region = mapRegion(regionSelect.value);
 
     await refresh(true);
@@ -217,7 +217,7 @@ async function fetchMatchesInChunks(ids, puuid, region){
 function dedupeById(list){ const seen=new Set(); const out=[]; for (const m of list){ if(!m?.matchId||seen.has(m.matchId)) continue; seen.add(m.matchId); out.push(m);} return out; }
 
 // ---- Render ----
-function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); }
+function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); renderDuos(); }
 
 function renderKPIs(){
   const list = CURRENT.matches;
@@ -267,7 +267,6 @@ function renderSidebar(){
 function renderHistory(forcedList){
   const listAll = (forcedList || CURRENT.matches).slice();
 
-  // base filters
   let list = listAll;
   if (CURRENT.filter === "wins") list = listAll.filter(m=>m.placement===1);
   else if (CURRENT.filter === "neverwon") {
@@ -275,8 +274,6 @@ function renderHistory(forcedList){
     const lostSet = new Set(Object.values(prog).filter(p=>!p.completed).map(p=>p.name));
     list = listAll.filter(m=>lostSet.has(m.championName));
   }
-
-  // champion typeable filter (substring match)
   if (CURRENT.champQuery){
     const q = CURRENT.champQuery.toLowerCase();
     list = list.filter(m => (m.championName||"").toLowerCase().includes(q));
@@ -310,22 +307,23 @@ function renderSynergy(){
     .map(x=>({ ...x, wr: x.games ? Math.round((100*x.wins)/x.games) : 0, avg: x.games ? (x.sumPlace/x.games).toFixed(2) : "—" }));
 
   // KPIs
-  const enough = rows.filter(x => x.games >= 5);
-  const best = enough.sort((a,b)=> b.wr - a.wr || b.games - a.games)[0];
-  const common = rows.slice().sort((a,b)=> b.games - a.games)[0];
+  if (bestDuoEl && commonDuoEl) {
+    const enough = rows.filter(x => x.games >= 5);
+    const best = enough.slice().sort((a,b)=> b.wr - a.wr || b.games - a.games)[0];
+    const common = rows.slice().sort((a,b)=> b.games - a.games)[0];
 
-  bestDuoEl.innerHTML = best
-    ? `<img src="${champIcon(best.ally)}" alt="${best.ally}">${best.ally} • ${best.wr}% WR (${best.games} games)`
-    : `<span class="muted">Not enough games yet</span>`;
+    bestDuoEl.innerHTML = best
+      ? `<img src="${champIcon(best.ally)}" alt="${best.ally}">${best.ally} • ${best.wr}% WR (${best.games} games)`
+      : `<span class="muted">Not enough games yet</span>`;
 
-  commonDuoEl.innerHTML = common
-    ? `<img src="${champIcon(common.ally)}" alt="${common.ally}">${common.ally} • ${common.games} games`
-    : `<span class="muted">No duo games yet</span>`;
+    commonDuoEl.innerHTML = common
+      ? `<img src="${champIcon(common.ally)}" alt="${common.ally}">${common.ally} • ${common.games} games`
+      : `<span class="muted">No duo games yet</span>`;
+  }
 
-  // Table
   synergyTableBody.innerHTML = rows.length
     ? rows
-        .sort((a,b)=> b.wr - a.wr) /* winrate desc */
+        .sort((a,b)=> b.wr - a.wr)
         .map(x=>`
           <tr>
             <td class="row"><img src="${champIcon(x.ally)}" width="22" height="22" style="border-radius:6px;border:1px solid var(--border)"> ${x.ally}</td>
@@ -333,6 +331,39 @@ function renderSynergy(){
           </tr>
         `).join("")
     : `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
+}
+
+// NEW: Best Duo Partners (by player name)
+function renderDuos(){
+  const agg = {};
+  for (const m of CURRENT.matches){
+    const name = m.allyName; // e.g., "Ally#TAG"
+    if (!name) continue;
+    const a = (agg[name] ||= { games:0, wins:0, sumPlace:0 });
+    a.games++; a.wins += (m.placement===1 ? 1 : 0); a.sumPlace += Number(m.placement)||0;
+  }
+
+  const rows = Object.entries(agg)
+    .map(([name, s]) => ({
+      name,
+      games: s.games,
+      wins: s.wins,
+      wr: s.games ? Math.round((100*s.wins)/s.games) : 0,
+      avg: s.games ? (s.sumPlace/s.games).toFixed(2) : "—",
+    }))
+    .sort((a,b)=> b.games - a.games);
+
+  duoTableBody.innerHTML = rows.length
+    ? rows.map(x => `
+        <tr>
+          <td>${x.name}</td>
+          <td>${x.games}</td>
+          <td>${x.wins}</td>
+          <td>${x.wr}%</td>
+          <td>${x.avg}</td>
+        </tr>
+      `).join("")
+    : `<tr><td colspan="5" class="muted">No duo partners found.</td></tr>`;
 }
 
 // ---- Utils ----
@@ -375,12 +406,8 @@ function drawPlacementBars(canvas, counts){
     ctx.fillStyle = "#7f8c8d"; ctx.font="12px system-ui"; ctx.fillText(String(y), 10, yy+4);
   }
 
-  // bright bar colors (vivid)
-  const colors = [
-    getCSS("--p1bar"), getCSS("--p2bar"), getCSS("--p3bar"),
-    getCSS("--pxbar"), getCSS("--pxbar"), getCSS("--pxbar"),
-    getCSS("--pxbar"), getCSS("--pxbar")
-  ];
+  // colors (vivid for top 3, neutral for the rest)
+  const colors = ["#ffd95e","#6eb4ff","#ffb26b","#b9c2cc","#b9c2cc","#b9c2cc","#b9c2cc","#b9c2cc"];
 
   const n = counts.length;
   const slotW = (W-60)/n;
@@ -397,12 +424,6 @@ function drawPlacementBars(canvas, counts){
     ctx.fillStyle = "#cfd9df";
     ctx.font = "bold 14px system-ui";
     ctx.fillText(String(counts[i]), x + bw/2 - 4, y - 4);
-
     ctx.fillText(`${i+1}${["st","nd","rd"][i]||"th"}`, x + bw/2 - 10, H - 4);
-  }
-
-  function getCSS(varName){
-    const el = document.documentElement;
-    return getComputedStyle(el).getPropertyValue(varName).trim() || "#888";
   }
 }
