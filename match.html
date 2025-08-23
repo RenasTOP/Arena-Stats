@@ -3,26 +3,54 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>LeagueArena.gg — Match</title>
-  <link rel="stylesheet" href="styles.css?v=build8" />
+  <title>Arena.gg — Match</title>
+  <link rel="stylesheet" href="styles.css?v=match9" />
 </head>
 <body>
   <header class="topbar">
     <div class="container">
-      <a class="brand" href="./"><img src="logo.svg" alt="LeagueArena.gg"></a>
-      <a class="ghost" href="./app.html">← Back</a>
+      <h1 class="brand">Arena.gg</h1>
+      <a class="ghost" href="./" id="back-link">← Back</a>
     </div>
   </header>
 
   <main class="container">
-    <section id="match-card" class="card"></section>
+    <!-- Summary -->
+    <section id="match-card" class="card">
+      <!-- filled by JS -->
+    </section>
+
+    <!-- Teams (duo pairs) -->
+    <section class="card">
+      <div class="section-title">
+        <h3>Teams & players</h3>
+        <small class="muted">ordered by final placement</small>
+      </div>
+      <div id="teams" class="teams-grid"><!-- JS --></div>
+    </section>
+
+    <!-- Raw table -->
     <section class="card" id="table-wrap">
-      <h3>Players</h3>
+      <div class="section-title">
+        <h3>All participants</h3>
+        <div class="legend">
+          <span class="legend-chip me"></span> You
+          <span class="legend-chip ally"></span> Your duo
+        </div>
+      </div>
       <div style="overflow:auto">
         <table class="table" id="match-table">
           <thead>
             <tr>
-              <th>Champion</th><th>Place</th><th>K / D / A</th><th>Gold</th><th>Damage</th><th>Items</th><th>Augments</th>
+              <th>#</th>
+              <th>Player</th>
+              <th>Champion</th>
+              <th>Place</th>
+              <th>K / D / A</th>
+              <th>Gold</th>
+              <th>Damage</th>
+              <th>Items</th>
+              <th>Augments</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -32,9 +60,9 @@
   </main>
 
   <footer class="footer">
-    <div class="container muted">Powered by Riot Games API • Icons by Data Dragon</div>
+    <div class="container muted">Powered by Riot Games API • icons by Data Dragon • @renas2g</div>
   </footer>
 
-  <script type="module" src="match.js?v=build8"></script>
+  <script type="module" src="match.js?v=match9"></script>
 </body>
 </html>
