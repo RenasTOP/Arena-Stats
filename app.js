@@ -1,11 +1,11 @@
-// Arena.gg frontend — tabs fixed + fast fetch (same API)
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
+// Arena.gg frontend — safe batching for Cloudflare + fast history
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
 const ARENA_QUEUE = 1700;
 
-const PAGE_SIZE = 100;
-const CHUNK_SIZE = 100;
+const PAGE_SIZE = 100;      // Riot max for /match-ids
+const CHUNK_SIZE = 35;      // <= worker MAX_IDS_PER_REQ (40) to avoid 500 "Too many subrequests"
 const IDS_PAGE_DELAY = 200;
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 
 function api(pathAndQuery){
   const base = API_BASE.replace(/\/+$/, "");
@@ -70,22 +70,17 @@ let CURRENT = {
 
 const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
 
-// ---- Tabs (robust) ----
+// ---- Tabs ----
 if (tabs) {
   tabs.addEventListener("click", (e)=>{
     const btn = e.target.closest("button"); if (!btn) return;
     const key = btn.dataset.tab;
-    // update button styles + aria
     [...tabs.querySelectorAll("button")].forEach(b=>{
       const active = b === btn;
       b.classList.toggle("active", active);
       b.setAttribute("aria-selected", active ? "true" : "false");
     });
-    // show only the chosen tab pane
-    for (const [k, el] of Object.entries(tabViews)) {
-      if (!el) continue;
-      el.classList.toggle("active", k === key);
-    }
+    for (const [k, el] of Object.entries(tabViews)) if (el) el.classList.toggle("active", k===key);
   });
 }
 
@@ -97,16 +92,8 @@ filters.addEventListener("click", (e)=>{
   CURRENT.filter = btn.dataset.filter;
   renderHistory();
 });
-
-champInput.addEventListener("input", ()=>{
-  CURRENT.champQuery = (champInput.value || "").trim();
-  renderHistory();
-});
-champClear.addEventListener("click", ()=>{
-  champInput.value = "";
-  CURRENT.champQuery = "";
-  renderHistory();
-});
+champInput.addEventListener("input", ()=>{ CURRENT.champQuery = (champInput.value || "").trim(); renderHistory(); });
+champClear.addEventListener("click", ()=>{ champInput.value=""; CURRENT.champQuery=""; renderHistory(); });
 
 // ---- Actions ----
 form.addEventListener("submit", onSearch);
@@ -146,13 +133,10 @@ function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), 
 function createStatus(){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; document.body.prepend(el); return el; }
 function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
 
-// ---- Progress helpers ----
-const progressWrap = document.getElementById("progress-wrap");
-const progressBar  = document.getElementById("progress-bar");
-const progressText = document.getElementById("progress-text");
-function showIndeterminate(msg){ if(!progressWrap)return; progressWrap.hidden=false; progressBar.classList.add('indeterminate'); progressBar.style.width='100%'; progressText.textContent=msg||'Working…'; }
-function showDeterminate(msg,pct){ if(!progressWrap)return; progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
-function hideProgress(){ if(!progressWrap)return; progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
+// ---- Progress UI helpers ----
+function showIndeterminate(msg){ progressWrap.hidden=false; progressBar.classList.add('indeterminate'); progressBar.style.width='100%'; progressText.textContent=msg||'Working…'; }
+function showDeterminate(msg,pct){ progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
+function hideProgress(){ progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
 
 // ---- URL prefill & auto-run ----
 function prefillFromURL(){
@@ -196,6 +180,7 @@ async function onSearch(e){
 async function refresh(full){
   if (!CURRENT.puuid) return;
   try{
+    // 1) Get ALL Ids
     showIndeterminate("Fetching match IDs…");
     let allIds = [];
     let start = 0;
@@ -210,6 +195,7 @@ async function refresh(full){
     }
     CURRENT.ids = allIds.slice();
 
+    // 2) Fetch details in safe chunks (<= MAX_IDS_PER_REQ)
     const known = new Set(CURRENT.matches.map(m=>m.matchId));
     const toFetch = allIds.filter(id=>!known.has(id));
     const total = toFetch.length;
@@ -219,7 +205,20 @@ async function refresh(full){
     let collected = [];
     for (let i=0;i<toFetch.length;i+=CHUNK_SIZE){
       const slice = toFetch.slice(i, i+CHUNK_SIZE);
-      const part = await fetchJSON(api(`/matches?ids=${slice.join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`));
+      let part;
+      try {
+        part = await fetchJSON(api(`/matches?ids=${slice.join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`));
+      } catch (e) {
+        // If we ever hit the cap, split in half once and retry
+        if (e && String(e).includes("Too many ids")) {
+          const mid = Math.floor(slice.length/2);
+          const a = await fetchJSON(api(`/matches?ids=${slice.slice(0,mid).join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`));
+          const b = await fetchJSON(api(`/matches?ids=${slice.slice(mid).join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`));
+          part = a.concat(b);
+        } else {
+          throw e;
+        }
+      }
       collected = collected.concat(part);
       fetched += slice.length;
       const pct = total ? Math.round((100*fetched)/total) : 100;
@@ -227,6 +226,7 @@ async function refresh(full){
       renderHistory(dedupeById(CURRENT.matches.concat(collected)).sort((a,b)=>b.gameStart-a.gameStart));
     }
 
+    // 3) Merge + cache + render
     CURRENT.matches = dedupeById(collected.concat(CURRENT.matches)).sort((a,b)=>b.gameStart-a.gameStart);
 
     const payload = { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() };
@@ -246,7 +246,7 @@ async function refresh(full){
 
 function dedupeById(list){ const seen=new Set(); const out=[]; for (const m of list){ if(!m?.matchId||seen.has(m.matchId)) continue; seen.add(m.matchId); out.push(m);} return out; }
 
-// ---- Render
+// ---- Renderers
 function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); renderDuos(); }
 
 function renderKPIs(){
@@ -355,7 +355,7 @@ function renderSynergy(){
 
 // Best Duo Partners (by player; group by allyPuuid)
 function renderDuos(){
-  const agg = new Map();  // puuid -> stats
+  const agg = new Map();
   const nameMap = new Map();
 
   for (const m of CURRENT.matches){
