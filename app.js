@@ -1,4 +1,4 @@
-// Arena.gg frontend (tabs + search + paging + sidebar + synergy + tierlist)
+// Arena.gg frontend (tabs + search + paging + sidebar + synergy)
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
 const ARENA_QUEUE = 1700;
 
@@ -18,7 +18,6 @@ const tabViews = {
   overview: document.getElementById("tab-overview"),
   history:  document.getElementById("tab-history"),
   synergy:  document.getElementById("tab-synergy"),
-  tierlist: document.getElementById("tab-tierlist"),
 };
 const form = document.getElementById("search-form");
 const riotIdInput = document.getElementById("riotid");
@@ -29,6 +28,7 @@ const btnMore = document.getElementById("btn-more");
 const winsChecklist = document.getElementById("wins-checklist");
 const hardestList = document.getElementById("hardest-list");
 const placementsCanvas = document.getElementById("placements-canvas");
+const placementsRange = document.getElementById("placements-range");
 const lastUpdatedEl = document.getElementById("last-updated");
 const filters = document.querySelector("#tab-history .filters");
 const synergyTableBody = document.querySelector("#synergy-table tbody");
@@ -186,7 +186,7 @@ async function fetchMatchesInChunks(ids, puuid, region){
 function dedupeById(list){ const seen=new Set(); const out=[]; for (const m of list){ if(!m?.matchId||seen.has(m.matchId)) continue; seen.add(m.matchId); out.push(m);} return out; }
 
 // ---- Render ----
-function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); renderTierlistOnce(); }
+function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); }
 
 function renderKPIs(){
   const list = CURRENT.matches;
@@ -205,19 +205,18 @@ function renderKPIs(){
 }
 
 function renderSidebar(){
-  // Wins checklist — ONLY champions you've won with
+  // Wins checklist — ONLY champs you've won with
   const byChamp = groupBy(CURRENT.matches, m=>m.championName);
   const rows = Object.keys(byChamp)
     .filter(name => byChamp[name].some(m=>m.placement===1))
     .sort((a,b)=>a.localeCompare(b))
     .map(name=>`
       <div class="check" title="${name}">
-        <img src="${champIcon(name)}" alt="${name}">
-        <div class="tick">✓</div>
+        <img src="${champIcon(name)}" alt="${name}"><div class="tick">✓</div>
       </div>`).join("");
   winsChecklist.innerHTML = rows || `<div class="muted small">Get a 1st to start filling this up.</div>`;
 
-  // Most attempts for a win (formerly “Hardest 1sts”)
+  // Most attempts for a win
   const progress = buildProgress(CURRENT.matches);
   const hardest = Object.values(progress)
     .filter(p=>p.completed)
@@ -227,10 +226,11 @@ function renderSidebar(){
     `<span class="tag"><img src="${champIcon(p.name)}" width="16" height="16" style="border-radius:4px;border:1px solid var(--border)"> ${p.name} · ${p.attemptsUntilFirst}</span>`
   ).join("") : `<div class="muted small">No wins yet.</div>`;
 
-  // Placement chart (narrow)
+  // Placement chart (colors = match-card badges)
   const counts = Array(8).fill(0);
   for (const m of CURRENT.matches){ const p=Number(m.placement); if (p>=1 && p<=8) counts[p-1]++; }
-  drawPlacementBars(placementsCanvas, counts);
+  if (placementsRange) placementsRange.textContent = `last ${CURRENT.matches.length} games`;
+  if (placementsCanvas) drawPlacementBars(placementsCanvas, counts);
 }
 
 function renderHistory(forcedList){
@@ -298,23 +298,48 @@ function groupBy(list, fn){ const map={}; for(const x of list){ const k=fn(x); (
 function tile(big,label){ return `<div class="tile"><div class="big">${big}</div><div class="label muted">${label}</div></div>`; }
 
 function drawPlacementBars(canvas, counts){
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d"); if(!ctx) return;
   const W=canvas.width, H=canvas.height;
   ctx.clearRect(0,0,W,H);
-  ctx.strokeStyle="#2a3340"; ctx.lineWidth=1;
-  const max=Math.max(1,...counts), top=Math.ceil(max/2)*2;
-  for(let y=0;y<=top;y+=Math.max(1,Math.floor(top/5))){
-    const yy = H-20 - (H-40)*(y/top);
-    ctx.beginPath(); ctx.moveTo(40,yy); ctx.lineTo(W-10,yy); ctx.stroke();
-    ctx.fillStyle="#7f8c8d"; ctx.font="12px system-ui"; ctx.fillText(String(y),10,yy+4);
+
+  // grid
+  ctx.strokeStyle = "#2a3340"; ctx.lineWidth = 1;
+  const max = Math.max(1, ...counts);
+  const top = Math.ceil(max / 2) * 2;
+  const step = Math.max(1, Math.floor(top/5));
+  for (let y=0; y<=top; y+=step){
+    const yy = H - 20 - (H-40) * (y/top);
+    ctx.beginPath(); ctx.moveTo(40, yy); ctx.lineTo(W-10, yy); ctx.stroke();
+    ctx.fillStyle = "#7f8c8d"; ctx.font="12px system-ui"; ctx.fillText(String(y), 10, yy+4);
   }
-  const colors=["#f4d03f","#e056fd","#74b9ff","#2ecc71","#bdc3c7","#bdc3c7","#bdc3c7","#bdc3c7"];
-  const n=counts.length, bw=(W-60)/n*0.7;
-  for(let i=0;i<n;i++){
-    const x=40 + i*((W-60)/n) + ((W-60)/n - bw)/2;
-    const h=(H-40)*(counts[i]/top), y=H-20-h;
-    ctx.fillStyle=colors[i]; ctx.fillRect(x,y,bw,h);
-    ctx.fillStyle="#cfd9df"; ctx.font="bold 14px system-ui"; ctx.fillText(String(counts[i]), x+bw/2-4, y-4);
-    const lbl = `${i+1}${["st","nd","rd"][i]||"th"}`; ctx.fillText(lbl, x+bw/2-10, H-4);
+
+  // bar colors aligned with card badges
+  const colors = [
+    getCSS("--p1"), getCSS("--p2"), getCSS("--p3"),
+    getCSS("--px"), getCSS("--px"), getCSS("--px"), getCSS("--px"), getCSS("--px")
+  ];
+
+  const n = counts.length;
+  const slotW = (W-60)/n;
+  const bw = slotW * 0.7;
+
+  for (let i=0;i<n;i++){
+    const x = 40 + i*slotW + (slotW-bw)/2;
+    const h = (H-40) * (counts[i]/top);
+    const y = H - 20 - h;
+
+    ctx.fillStyle = colors[i];
+    ctx.fillRect(x, y, bw, h);
+
+    ctx.fillStyle = "#cfd9df";
+    ctx.font = "bold 14px system-ui";
+    ctx.fillText(String(counts[i]), x + bw/2 - 4, y - 4);
+
+    ctx.fillText(`${i+1}${["st","nd","rd"][i]||"th"}`, x + bw/2 - 10, H - 4);
+  }
+
+  function getCSS(varName){
+    const el = document.documentElement;
+    return getComputedStyle(el).getPropertyValue(varName).trim() || "#888";
   }
 }
