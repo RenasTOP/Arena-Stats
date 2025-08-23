@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>LeagueArena.gg, Profile</title>
-  <link rel="stylesheet" href="styles.css?v=build10" />
+  <title>LeagueArena.gg — Profile</title>
+  <link rel="stylesheet" href="styles.css?v=build11" />
 </head>
 <body>
   <header class="topbar">
@@ -16,11 +16,20 @@
         <button data-tab="duos">Best Duo Partners</button>
       </nav>
       <form id="search-form" class="search">
-        <select id="region-select">
+        <select id="region-select" title="Region">
           <option>NA</option>
           <option selected>EUW</option>
           <option>EUNE</option>
         </select>
+
+        <!-- Novo: intervalo de histórico -->
+        <select id="range-select" title="History range">
+          <option value="arena4" selected>Since Arena 4.0</option>
+          <option value="90d">Last 90 days</option>
+          <option value="180d">Last 180 days</option>
+          <option value="all">All history</option>
+        </select>
+
         <input id="riotid" placeholder="Riot ID (Name#TAG)" />
         <button type="submit">Search</button>
         <button type="button" id="btn-update" class="ghost">Update</button>
@@ -30,10 +39,10 @@
 
   <div class="progress-wrap container" id="progress-wrap" hidden>
     <div class="progress-line"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
-    <div class="progress-text" id="progress-text">Preparing...</div>
+    <div class="progress-text" id="progress-text">Preparing…</div>
   </div>
 
-  <!-- Agora o layout começa oculto e só aparece quando terminar o fetch completo -->
+  <!-- Só fica visível quando o fetch completo termina -->
   <main class="container layout" id="main-layout" hidden>
     <aside class="sidebar">
       <section class="card">
@@ -66,7 +75,7 @@
           <button data-filter="wins">1st place</button>
           <button data-filter="neverwon">Never won</button>
           <div class="champ-filter">
-            <input id="champ-input" list="champ-datalist" placeholder="Filter by champion..." />
+            <input id="champ-input" list="champ-datalist" placeholder="Filter by champion…" />
             <datalist id="champ-datalist"></datalist>
             <button id="champ-clear" class="ghost sm">Clear</button>
           </div>
@@ -92,11 +101,11 @@
           <div class="duo-cards">
             <div class="duo-card" id="best-duo">
               <div class="duo-label">Best duo (≥5 games)</div>
-              <div class="duo-value muted">...</div>
+              <div class="duo-value muted">—</div>
             </div>
             <div class="duo-card" id="common-duo">
               <div class="duo-label">Most common duo</div>
-              <div class="duo-value muted">...</div>
+              <div class="duo-value muted">—</div>
             </div>
           </div>
         </section>
@@ -114,9 +123,9 @@
   </main>
 
   <footer class="footer">
-    <div class="container muted">Powered by Riot Games API, Icons by Data Dragon</div>
+    <div class="container muted">Powered by Riot Games API • Icons by Data Dragon</div>
   </footer>
 
-  <script type="module" src="app.js?v=build10"></script>
+  <script type="module" src="app.js?v=build11"></script>
 </body>
 </html>
