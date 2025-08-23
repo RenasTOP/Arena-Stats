@@ -5,18 +5,11 @@ const ARENA_QUEUE = 1700;
 const PAGE_SIZE = 100;
 const CHUNK_SIZE = 10;
 const IDS_PAGE_DELAY = 200;
-const CACHE_VERSION = "v9";
+const CACHE_VERSION = "v10";
 
-// Data aproximada de retorno da Arena 4.0 (ajusta aqui se quiseres ser 100% preciso)
-const ARENA4_START_ISO = "2024-12-01"; // YYYY-MM-DD
-function rangeToStartTime(val){
-  const now = Math.floor(Date.now()/1000);
-  if (val === "all") return null;
-  if (val === "90d") return now - 90*86400;
-  if (val === "180d") return now - 180*86400;
-  if (val === "arena4") return Math.floor(new Date(`${ARENA4_START_ISO}T00:00:00Z`).getTime()/1000);
-  return null;
-}
+// ---- Storage keys para pins & recents ----
+const PIN_KEY = "arena_pins_v1";       // [{id,regionUI,ts}]
+const RECENT_KEY = "arena_recents_v1"; // [{id,regionUI,ts}]
 
 function api(pathAndQuery){
   const base = API_BASE.replace(/\/+$/, "");
@@ -35,8 +28,8 @@ const tabViews = {
 const form = document.getElementById("search-form");
 const riotIdInput = document.getElementById("riotid");
 const regionSelect = document.getElementById("region-select");
-const rangeSelect  = document.getElementById("range-select");
 const btnUpdate = document.getElementById("btn-update");
+const btnPin = document.getElementById("btn-pin");
 
 const mainLayout = document.getElementById("main-layout");
 const kpisBox = document.getElementById("kpis");
@@ -59,6 +52,10 @@ const duoTableBody = document.querySelector("#duo-table tbody");
 const bestDuoEl = document.getElementById("best-duo")?.querySelector(".duo-value");
 const commonDuoEl = document.getElementById("common-duo")?.querySelector(".duo-value");
 
+// Quicklists
+const pinsList = document.getElementById("pins-list");
+const recentsList = document.getElementById("recents-list");
+
 // Progress UI
 const progressWrap = document.getElementById("progress-wrap");
 const progressBar  = document.getElementById("progress-bar");
@@ -79,10 +76,9 @@ let CURRENT = {
   filter: "all",
   champQuery: "",
   lastUpdated: null,
-  range: "arena4",
 };
 
-const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}:${CURRENT.range}`;
+const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
 
 // ---- Tabs ----
 if (tabs) {
@@ -112,7 +108,7 @@ champClear.addEventListener("click", ()=>{ champInput.value=""; CURRENT.champQue
 // ---- Actions ----
 form.addEventListener("submit", onSearch);
 btnUpdate.addEventListener("click", () => refresh(true));
-rangeSelect.addEventListener("change", ()=>{ CURRENT.range = rangeSelect.value; }); // só efetiva no próximo refresh
+btnPin.addEventListener("click", onTogglePin);
 
 matchesBox.addEventListener("click", (e)=>{
   const card = e.target.closest(".item");
@@ -146,8 +142,6 @@ async function fetchJSON(url, tries=3, delay=600){
 async function initDDragon(){
   try { const r = await fetch("https://ddragon.leagueoflegends.com/api/versions.json"); if (r.ok){ const arr = await r.json(); if (arr?.[0]) DD_VERSION = arr[0]; } } catch {}
 }
-function loadCache(puuid){ try { return JSON.parse(localStorage.getItem(cacheKey(puuid))||"null"); } catch { return null; } }
-function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
 function createStatus(){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; document.body.prepend(el); return el; }
 function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
 
@@ -161,14 +155,73 @@ function prefillFromURL(){
   const u = new URL(location.href);
   const id = u.searchParams.get('id');
   const region = u.searchParams.get('region');
-  const range = u.searchParams.get('range');
   if (region) regionSelect.value = region.toUpperCase();
-  if (range && ["arena4","90d","180d","all"].includes(range)) { rangeSelect.value = range; CURRENT.range = range; }
   if (id && id.includes('#')) {
     riotIdInput.value = id;
     setTimeout(()=> form.dispatchEvent(new Event('submit', {cancelable:true})), 0);
   }
+  renderQuicklists(); // mostra pins/recents mesmo sem pesquisa
 }
+
+// ---- Pins & Recents ----
+function loadPins(){ try{ return JSON.parse(localStorage.getItem(PIN_KEY)||"[]"); }catch{ return []; } }
+function savePins(arr){ try{ localStorage.setItem(PIN_KEY, JSON.stringify(arr)); }catch{} }
+function loadRecents(){ try{ return JSON.parse(localStorage.getItem(RECENT_KEY)||"[]"); }catch{ return []; } }
+function saveRecents(arr){ try{ localStorage.setItem(RECENT_KEY, JSON.stringify(arr)); }catch{} }
+
+function currentNameTag(){ return (CURRENT.gameName && CURRENT.tagLine) ? `${CURRENT.gameName}#${CURRENT.tagLine}` : null; }
+function currentRegionUI(){ return (regionSelect.value || "EUW").toUpperCase(); }
+
+function isPinned(nameTag, regionUI){
+  const pins = loadPins();
+  return pins.some(p => p.id===nameTag && p.regionUI===regionUI);
+}
+function onTogglePin(){
+  const id = currentNameTag(); if (!id) return;
+  const reg = currentRegionUI();
+  const pins = loadPins();
+  const idx = pins.findIndex(p => p.id===id && p.regionUI===reg);
+  if (idx !== -1) pins.splice(idx,1); else pins.unshift({ id, regionUI: reg, ts: Date.now() });
+  savePins(pins.slice(0,8));
+  updatePinButton();
+  renderQuicklists();
+}
+function updatePinButton(){
+  const id = currentNameTag(); if (!id){ btnPin.disabled = true; btnPin.textContent = "☆ Pin"; return; }
+  btnPin.disabled = false;
+  const pinned = isPinned(id, currentRegionUI());
+  btnPin.textContent = pinned ? "★ Unpin" : "☆ Pin";
+  btnPin.title = pinned ? "Unpin this profile" : "Pin this profile";
+}
+
+function pushRecent(nameTag, regionUI){
+  if (!nameTag) return;
+  const arr = loadRecents().filter(x => !(x.id===nameTag && x.regionUI===regionUI));
+  arr.unshift({ id:nameTag, regionUI, ts: Date.now() });
+  saveRecents(arr.slice(0,8));
+}
+function renderQuicklists(){
+  const pins = loadPins();
+  const recs = loadRecents();
+
+  pinsList.innerHTML = pins.length ? pins.map(x=>{
+    const url = new URL("./app.html", location.href);
+    url.searchParams.set("id", x.id);
+    url.searchParams.set("region", x.regionUI);
+    return `<a href="${url.toString()}" class="link-chip" title="${x.id} (${x.regionUI})">${x.id}</a>`;
+  }).join("") : `<div class="muted small">Sem fixos</div>`;
+
+  recentsList.innerHTML = recs.length ? recs.map(x=>{
+    const url = new URL("./app.html", location.href);
+    url.searchParams.set("id", x.id);
+    url.searchParams.set("region", x.regionUI);
+    return `<a href="${url.toString()}" class="link-chip" title="${x.id} (${x.regionUI})">${x.id}</a>`;
+  }).join("") : `<div class="muted small">Sem recentes</div>`;
+}
+
+// ---- Cache helpers ----
+function loadCache(puuid){ try { return JSON.parse(localStorage.getItem(cacheKey(puuid))||"null"); } catch { return null; } }
+function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
 
 // ---- Search / Refresh ----
 async function onSearch(e){
@@ -185,10 +238,13 @@ async function onSearch(e){
 
     const acc = await fetchJSON(api(`/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`));
     CURRENT.gameName = acc.gameName; CURRENT.tagLine = acc.tagLine; CURRENT.puuid = acc.puuid;
-
     CURRENT.matches = []; CURRENT.ids = []; CURRENT.lastUpdated = null;
     CURRENT.region = mapRegionUItoRouting(regionSelect.value);
-    CURRENT.range = rangeSelect.value;
+
+    // Guardar em Recentes
+    pushRecent(`${acc.gameName}#${acc.tagLine}`, (regionSelect.value || "EUW").toUpperCase());
+    renderQuicklists();
+    updatePinButton();
 
     await refresh(true);
   } catch(err){ console.error(err); status(err.message || "Error"); hideProgress(); setMainVisible(false); }
@@ -197,22 +253,13 @@ async function onSearch(e){
 async function refresh(){
   if (!CURRENT.puuid) return;
   try{
-    // 1) Get ALL Ids (já com startTime para cortar o passado)
+    // 1) Get ALL Ids
     showIndeterminate("Fetching match IDs…");
     let allIds = [];
     let start = 0;
-    const startTime = rangeToStartTime(CURRENT.range);
     for (;;) {
-      const q = [
-        `puuid=${CURRENT.puuid}`,
-        `region=${CURRENT.region}`,
-        `queue=${ARENA_QUEUE}`,
-        `start=${start}`,
-        `count=${PAGE_SIZE}`,
-      ];
-      if (startTime) q.push(`startTime=${startTime}`);
       progressText.textContent = `Fetching match IDs… ${start}–${start + PAGE_SIZE - 1}`;
-      const ids = await fetchJSON(api(`/match-ids?${q.join("&")}`));
+      const ids = await fetchJSON(api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`));
       if (!ids.length) break;
       allIds.push(...ids);
       start += ids.length;
@@ -221,7 +268,7 @@ async function refresh(){
     }
     CURRENT.ids = allIds.slice();
 
-    // 2) Fetch details in safe 10-id chunks
+    // 2) Details in chunks (não mostra nada ainda — só no fim)
     const total = allIds.length;
     let fetched = 0;
     showDeterminate(`Fetching match details… 0 / ${total}`, 0);
@@ -258,8 +305,8 @@ async function refresh(){
 
 function dedupeById(list){ const seen=new Set(); const out=[]; for (const m of list){ if(!m?.matchId||seen.has(m.matchId)) continue; seen.add(m.matchId); out.push(m);} return out; }
 
-// ---- Renderers
-function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); renderDuos(); }
+// ---- Renderers ----
+function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); renderDuos(); updatePinButton(); }
 
 function renderKPIs(){
   const list = CURRENT.matches;
@@ -400,7 +447,7 @@ function renderDuos(){
     : `<tr><td colspan="5" class="muted">No duo partners found.</td></tr>`;
 }
 
-// ---- Utils
+// ---- Utils ----
 function buildProgress(matches){
   const byChamp = groupBy(matches, m=>m.championName);
   const out = {};
