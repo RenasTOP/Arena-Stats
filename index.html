@@ -18,6 +18,12 @@
       </nav>
 
       <form id="search-form" class="search">
+        <select id="region-select" title="Region">
+          <option value="auto" selected>Auto region</option>
+          <option value="americas">Americas</option>
+          <option value="europe">Europe</option>
+          <option value="asia">Asia</option>
+        </select>
         <input id="riotid" placeholder="Riot ID (Name#TAG)" />
         <button type="submit">Search</button>
         <button type="button" id="btn-update" class="ghost">Update</button>
@@ -59,10 +65,19 @@
 
       <!-- HISTORY -->
       <div id="tab-history" class="tab">
-        <div class="filters segmented">
-          <button data-filter="all" class="active">All</button>
-          <button data-filter="wins">1st place</button>
-          <button data-filter="neverwon">Never won</button>
+        <div class="toolbar">
+          <div class="filters segmented">
+            <button data-filter="all" class="active">All</button>
+            <button data-filter="wins">1st place</button>
+            <button data-filter="neverwon">Never won</button>
+          </div>
+
+          <div class="champ-filter">
+            <label for="champ-select" class="muted small">Champion</label>
+            <select id="champ-select">
+              <option value="__all__" selected>All champions</option>
+            </select>
+          </div>
         </div>
 
         <section id="matches" class="grid"></section>
@@ -75,6 +90,18 @@
       <div id="tab-synergy" class="tab">
         <section class="card">
           <h3>Duo synergies (your ally pair)</h3>
+
+          <div class="duo-kpis">
+            <div class="duo-tile" id="best-duo">
+              <div class="duo-title">Best duo</div>
+              <div class="duo-value muted">—</div>
+            </div>
+            <div class="duo-tile" id="common-duo">
+              <div class="duo-title">Most common duo</div>
+              <div class="duo-value muted">—</div>
+            </div>
+          </div>
+
           <table class="table" id="synergy-table">
             <thead>
               <tr>
