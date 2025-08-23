@@ -12,17 +12,15 @@
       <h1 class="brand">Arena.gg</h1>
 
       <nav class="tabs" id="tabs">
-        <button data-tab="overview" class="active">Overview</button>
-        <button data-tab="history">History</button>
+        <button data-tab="matches" class="active">Matches</button>
         <button data-tab="synergy">Duo Synergies</button>
       </nav>
 
       <form id="search-form" class="search">
         <select id="region-select" title="Region">
-          <option value="auto" selected>Auto region</option>
-          <option value="americas">Americas</option>
-          <option value="europe">Europe</option>
-          <option value="asia">Asia</option>
+          <option value="na" selected>NA</option>
+          <option value="euw">EUW</option>
+          <option value="eune">EUNE</option>
         </select>
         <input id="riotid" placeholder="Riot ID (Name#TAG)" />
         <button type="submit">Search</button>
@@ -58,13 +56,10 @@
 
     <!-- Right content -->
     <section class="content">
-      <!-- OVERVIEW -->
-      <div id="tab-overview" class="tab active">
+      <!-- MATCHES (KPIs + Filters + History) -->
+      <div id="tab-matches" class="tab active">
         <section class="kpis card" id="kpis"></section>
-      </div>
 
-      <!-- HISTORY -->
-      <div id="tab-history" class="tab">
         <div class="toolbar">
           <div class="filters segmented">
             <button data-filter="all" class="active">All</button>
@@ -73,10 +68,12 @@
           </div>
 
           <div class="champ-filter">
-            <label for="champ-select" class="muted small">Champion</label>
-            <select id="champ-select">
-              <option value="__all__" selected>All champions</option>
-            </select>
+            <label for="champ-input" class="muted small">Champion</label>
+            <div class="combo">
+              <input id="champ-input" list="champ-datalist" placeholder="Type a champion…" />
+              <button id="champ-clear" class="ghost" type="button" title="Clear">✕</button>
+              <datalist id="champ-datalist"></datalist>
+            </div>
           </div>
         </div>
 
