@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LeagueArena.gg</title>
-  <link rel="stylesheet" href="styles.css?v=build9" />
+  <link rel="stylesheet" href="styles.css?v=build13" />
 </head>
 <body class="home">
   <main class="hero">
@@ -16,38 +16,31 @@
         <option selected>EUW</option>
         <option>EUNE</option>
       </select>
-      <input id="home-riotid" placeholder="Riot ID (Name#TAG)" />
+      <input id="home-riotid" placeholder="Riot ID (Name#TAG ou Name TAG)" />
       <button type="submit">Search</button>
     </form>
     <small class="muted">Powered by Riot Games API • Icons by Data Dragon</small>
   </main>
 
   <script>
-  (function(){
-    // Se a homepage for aberta com ?id= e ?region=, redireciona logo para app.html
-    const u = new URL(location.href);
-    const id = u.searchParams.get('id');
-    const region = u.searchParams.get('region');
-    if (id && id.includes('#')) {
-      const url = new URL('./app.html', location.href);
-      url.searchParams.set('id', id);
-      if (region) url.searchParams.set('region', region);
-      location.replace(url.toString());
-      return;
-    }
-
-    // Pesquisa normal a partir do formulário
-    document.getElementById('home-search').addEventListener('submit', (e)=>{
-      e.preventDefault();
-      const region = document.getElementById('home-region').value;
-      const id = document.getElementById('home-riotid').value.trim();
-      if(!id.includes('#')) { alert('Use Name#TAG'); return; }
-      const url = new URL('./app.html', location.href);
-      url.searchParams.set('id', id);
-      url.searchParams.set('region', region);
-      location.href = url.toString();
-    });
-  })();
+  function parseRiotId(raw){
+    const s = String(raw||"").trim();
+    // Aceita "Name#TAG" OU "Name TAG" (um ou mais espaços)
+    const m = s.match(/^\s*(.+?)\s*(?:#|\s+)\s*([A-Za-z0-9]{2,5})\s*$/);
+    if (!m) return null;
+    return { gameName: m[1], tagLine: m[2] };
+  }
+  document.getElementById('home-search').addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const region = document.getElementById('home-region').value;
+    const raw = document.getElementById('home-riotid').value;
+    const id = parseRiotId(raw);
+    if(!id){ alert('Usa "Name#TAG" ou "Name TAG"'); return; }
+    const url = new URL('./app.html', location.href);
+    url.searchParams.set('id', `${id.gameName}#${id.tagLine}`);
+    url.searchParams.set('region', region);
+    location.href = url.toString();
+  });
   </script>
 </body>
 </html>
