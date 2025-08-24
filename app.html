@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LeagueArena.gg — Profile</title>
-  <link rel="stylesheet" href="styles.css?v=build12" />
+  <link rel="stylesheet" href="styles.css?v=build15" />
 </head>
 <body>
   <header class="topbar">
@@ -15,14 +15,15 @@
         <button data-tab="synergy">Duo Synergies</button>
         <button data-tab="duos">Best Duo Partners</button>
       </nav>
-      <form id="search-form" class="search">
+      <!-- Fallback: onsubmit e onclick chamam startSearch -->
+      <form id="search-form" class="search" onsubmit="return startSearch(event)">
         <select id="region-select" title="Region">
           <option>NA</option>
           <option selected>EUW</option>
           <option>EUNE</option>
         </select>
-        <input id="riotid" placeholder="Riot ID (Name#TAG)" />
-        <button type="submit">Search</button>
+        <input id="riotid" placeholder="Riot ID (Name#TAG ou Name TAG)" />
+        <button type="submit" id="btn-search" onclick="return startSearch(event)">Search</button>
         <button type="button" id="btn-update" class="ghost">Update</button>
         <button type="button" id="btn-pin" class="ghost" title="Pin/Unpin this profile">☆ Pin</button>
       </form>
@@ -34,7 +35,7 @@
     <div class="progress-text" id="progress-text">Preparing…</div>
   </div>
 
-  <!-- Só fica visível quando o fetch completo termina -->
+  <!-- Só mostra quando acabar o fetch -->
   <main class="container layout" id="main-layout" hidden>
     <aside class="sidebar">
       <section class="card">
@@ -132,6 +133,7 @@
     <div class="container muted">Powered by Riot Games API • Icons by Data Dragon</div>
   </footer>
 
-  <script type="module" src="app.js?v=build12"></script>
+  <!-- sem module; com defer para garantir DOM pronto -->
+  <script src="app.js?v=build15" defer></script>
 </body>
 </html>
