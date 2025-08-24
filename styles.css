@@ -158,3 +158,10 @@ body.home{display:grid;place-items:center;min-height:100vh;background:radial-gra
 
 /* Tabela: cabeçalhos sticky (se quiseres) */
 /* .table thead th{position:sticky;top:0;background:var(--panel)} */
+
+
+/* Quicklists (Recentes & Fixos) */
+.quicklists{display:grid;gap:8px}
+.links-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.link-chip{display:inline-block;padding:6px 8px;border:1px solid var(--border);border-radius:999px;background:#0e131a;color:inherit;text-decoration:none;font-size:.9rem}
+.link-chip:hover{background:#121a24}
