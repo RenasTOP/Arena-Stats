@@ -1,5 +1,5 @@
 // Arena.gg — boot visível + fallback inline + main só quando terminar fetch
-console.log("app.js boot OK");
+console.log("app.js boot OK (v16)");
 
 // ===== Config =====
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
@@ -7,7 +7,7 @@ const ARENA_QUEUE = 1700;
 const PAGE_SIZE = 100;
 const CHUNK_SIZE = 10;
 const IDS_PAGE_DELAY = 200;
-const CACHE_VERSION = "v15";
+const CACHE_VERSION = "v16";
 
 // ===== DOM =====
 const form = document.getElementById("search-form");
@@ -16,6 +16,14 @@ const riotIdInput = document.getElementById("riotid");
 const regionSelect = document.getElementById("region-select");
 const btnUpdate = document.getElementById("btn-update");
 const btnPin = document.getElementById("btn-pin");
+
+// TABS (restaurado)
+const tabsNav = document.getElementById("tabs");
+const tabViews = {
+  matches: document.getElementById("tab-matches"),
+  synergy: document.getElementById("tab-synergy"),
+  duos: document.getElementById("tab-duos"),
+};
 
 const mainLayout = document.getElementById("main-layout");
 const kpisBox = document.getElementById("kpis");
@@ -170,6 +178,25 @@ function prefillFromURL(){
   renderQuicklists();
 }
 prefillFromURL();
+
+// ===== Tabs init (RESTAURO) =====
+if (tabsNav) {
+  tabsNav.addEventListener("click", (e)=>{
+    const btn = e.target.closest("button"); if (!btn) return;
+    const key = btn.dataset.tab;
+    // toggle estado visual nos botões
+    [...tabsNav.querySelectorAll("button")].forEach(b=>{
+      const active = b === btn;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    // troca de vistas
+    Object.entries(tabViews).forEach(([k, el])=>{
+      if (!el) return;
+      el.classList.toggle("active", k === key);
+    });
+  });
+}
 
 // ===== Listeners (também temos fallbacks inline no HTML) =====
 if (form) form.addEventListener("submit", onSearch, { capture: true });
