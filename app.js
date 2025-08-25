@@ -1,60 +1,63 @@
-// Arena.gg — cache-first + incremental update + splash bg + resilient fetch (revamp13)
-console.log("app.js boot OK (revamp13)");
-
-// ===== Config =====
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
+// Arena.gg frontend — safe 10-id chunks to avoid Cloudflare subrequest limits
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
 const ARENA_QUEUE = 1700;
-const PAGE_SIZE = 100;
-const CHUNK_SIZE = 10;
+
+const PAGE_SIZE = 100;      // Riot max for /match-ids
+const CHUNK_SIZE = 10;      // <= worker MAX_IDS_PER_REQ (12) to stay WELL under subrequest cap
 const IDS_PAGE_DELAY = 200;
-const CACHE_VERSION = "v18"; // keep cache
+const CACHE_VERSION = "v7.1";
 
-// ===== DOM =====
-const form = document.getElementById("search-form");
-const btnSearch = document.getElementById("btn-search");
-const riotIdInput = document.getElementById("riotid");
-const regionSelect = document.getElementById("region-select");
-const btnUpdate = document.getElementById("btn-update");
-const btnPin = document.getElementById("btn-pin");
+function api(pathAndQuery){
+  const base = API_BASE.replace(/\/+$/, "");
+  const path = pathAndQuery.startsWith("/") ? pathAndQuery : `/${pathAndQuery}`;
+  return `${base}${path}`;
+}
 
-// Tabs
-const tabsNav = document.getElementById("tabs");
+// ---- DOM ----
+const tabs = document.getElementById("tabs");
 const tabViews = {
   matches: document.getElementById("tab-matches"),
   synergy: document.getElementById("tab-synergy"),
   duos:    document.getElementById("tab-duos"),
 };
 
+const form = document.getElementById("search-form");
+const riotIdInput = document.getElementById("riotid");
+const regionSelect = document.getElementById("region-select");
+const btnUpdate = document.getElementById("btn-update");
+
 const kpisBox = document.getElementById("kpis");
 const matchesBox = document.getElementById("matches");
+
 const champInput = document.getElementById("champ-input");
 const champClear = document.getElementById("champ-clear");
 const champDatalist = document.getElementById("champ-datalist");
+
 const winsChecklist = document.getElementById("wins-checklist");
 const hardestList = document.getElementById("hardest-list");
 const placementsCanvas = document.getElementById("placements-canvas");
 const placementsRange = document.getElementById("placements-range");
 const lastUpdatedEl = document.getElementById("last-updated");
 
-const filtersEl = document.querySelector("#tab-matches .filters");
+const filters = document.querySelector("#tab-matches .filters");
 const synergyTableBody = document.querySelector("#synergy-table tbody");
 const duoTableBody = document.querySelector("#duo-table tbody");
+
 const bestDuoEl = document.getElementById("best-duo")?.querySelector(".duo-value");
 const commonDuoEl = document.getElementById("common-duo")?.querySelector(".duo-value");
 
-// Quicklists
-const pinsList = document.getElementById("pins-list");
-const recentsList = document.getElementById("recents-list");
-
-// Progress + status
+// Progress UI
 const progressWrap = document.getElementById("progress-wrap");
 const progressBar  = document.getElementById("progress-bar");
 const progressText = document.getElementById("progress-text");
-const statusBox = createStatus("");
 
-// ===== State =====
+// Status line
+const statusBox = createStatus();
+
+// ---- State ----
 let DD_VERSION = "15.16.1";
-const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Khazix", VelKoz:"Velkoz", ChoGath:"Chogath", KaiSa:"Kaisa", LeBlanc:"LeBlanc", DrMundo:"DrMundo", Nunu:"Nunu", Renata:"Renata", RekSai:"RekSai", KogMaw:"KogMaw", BelVeth:"BelVeth", TahmKench:"TahmKench" };
+const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Khazix", VelKoz:"Velkoz", ChoGath:"Chogath", KaiSa:"Kaisa", LeBlanc:"Leblanc", DrMundo:"DrMundo", Nunu:"Nunu", Renata:"Renata", RekSai:"RekSai", KogMaw:"KogMaw", BelVeth:"Belveth", TahmKench:"TahmKench" };
+const ITEM_DB = { byId:{} };
 
 let CURRENT = {
   gameName: "", tagLine: "",
@@ -68,343 +71,144 @@ let CURRENT = {
 
 const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
 
-// ===== Utils =====
-function api(pathAndQuery){
-  const base = API_BASE.replace(/\/+$/, "");
-  const path = pathAndQuery.startsWith("/") ? pathAndQuery : `/${pathAndQuery}`;
-  return `${base}${path}`;
-}
-function parseRiotId(raw){
-  const s = String(raw||"").trim();
-  const m = s.match(/^\s*(.+?)\s*(?:#|\s+)\s*([A-Za-z0-9]{2,5})\s*$/);
-  if (!m) return null;
-  return { gameName: m[1], tagLine: m[2] };
-}
-function safeRegionUI(){ const v = regionSelect?.value || "EUW"; return String(v).toUpperCase(); }
-function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
-function champIcon(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`; }
-// Loading art – skin index unknown -> 0
-function loadingArt(name, skinIndex=0){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/img/champion/loading/${encodeURIComponent(fixed)}_${skinIndex}.jpg`; }
-function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "?"; return `${n}th`; }
-function timeAgo(ts){ if(!ts) return "unknown"; const s=Math.max(1,Math.floor((Date.now()-Number(ts))/1000)); const m=Math.floor(s/60); if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<48) return `${h}h ago`; const d=Math.floor(h/24); return `${d}d ago`; }
-function createStatus(txt){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; el.textContent = txt||""; document.body.prepend(el); return el; }
-function status(t){ if(statusBox) statusBox.textContent = t||""; }
-function setLastUpdated(ts){ if(lastUpdatedEl) lastUpdatedEl.textContent = ts ? `Last updated, ${new Date(ts).toLocaleString()}` : ""; }
-
-// --- fetch with hard timeout to avoid infinite spinners ---
-async function fetchWithTimeout(resource, { timeout=10000 } = {}){
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-  try {
-    const resp = await fetch(resource, { signal: controller.signal });
-    return resp;
-  } catch (err) {
-    if (err?.name === "AbortError") {
-      const e = new Error("Timeout");
-      e.code = "TIMEOUT";
-      throw e;
-    }
-    throw err;
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-async function fetchJSON(url, tries=4, delay=700, timeoutMs=10000){
-  try {
-    const r = await fetchWithTimeout(url, { timeout: timeoutMs });
-    if (r.ok) return r.json();
-
-    const txt = await r.text().catch(()=> "");
-    const status = r.status;
-    const is429 = status===429 || /Riot 429/i.test(txt);
-    const is5xx = (status>=500 && status<600) || /Riot 5\d{2}/i.test(txt);
-
-    if ((is429 || is5xx) && tries>0){
-      const jitter = Math.random()*400;
-      await new Promise(res=>setTimeout(res, delay + jitter));
-      return fetchJSON(url, tries-1, Math.min(delay*1.8, 6000), timeoutMs);
-    }
-    throw new Error(`HTTP ${status}${txt?`: ${txt}`:""}`);
-  } catch (err) {
-    // Timeout or network → retry if we still have tries
-    if ((err?.code === "TIMEOUT" || /TypeError: Failed to fetch/i.test(String(err))) && tries>0){
-      const jitter = Math.random()*400;
-      await new Promise(res=>setTimeout(res, delay + jitter));
-      // keep same timeout per try; or slightly increase if you want
-      return fetchJSON(url, tries-1, Math.min(delay*1.8, 6000), timeoutMs);
-    }
-    throw err;
-  }
-}
-
-async function initDDragon(){
-  // keep it non-blocking — if this stalls, we just fall back to default DD_VERSION
-  try {
-    const r = await fetchWithTimeout("https://ddragon.leagueoflegends.com/api/versions.json", { timeout: 5000 });
-    if (r.ok){
-      const arr = await r.json();
-      if (arr?.[0]) DD_VERSION = arr[0];
-    }
-  } catch {}
-}
-
-// Progress UI
-function showIndeterminate(msg){ if(!progressWrap||!progressBar||!progressText) return; progressWrap.hidden=false; progressBar.classList.add('indeterminate'); progressBar.style.width='100%'; progressText.textContent=msg||'Working…'; }
-function showDeterminate(msg,pct){ if(!progressWrap||!progressBar||!progressText) return; progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
-function hideProgress(){ if(!progressWrap||!progressBar||!progressText) return; progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
-
-// Friendly error mapper
-function friendly(err){
-  const msg = String(err?.message||err||"");
-  if (/Timeout/i.test(msg)) return "Proxy request timed out. Try again.";
-  if (/429/.test(msg)) return "Riot rate limit (429). Please wait a bit and try again.";
-  if (/503|Service Unavailable/i.test(msg)) return "Riot API is temporarily unavailable (503). Try again in a minute.";
-  if (/502|504|522|524/.test(msg)) return "Upstream temporarily unreachable. Retrying might help.";
-  return `Request failed: ${msg}`;
-}
-
-// Pins/Recents
-const PIN_KEY = "arena_pins_v1";
-const RECENT_KEY = "arena_recents_v1";
-function loadPins(){ try{ return JSON.parse(localStorage.getItem(PIN_KEY)||"[]"); }catch{ return []; } }
-function savePins(arr){ try{ localStorage.setItem(PIN_KEY, JSON.stringify(arr)); }catch{} }
-function loadRecents(){ try{ return JSON.parse(localStorage.getItem(RECENT_KEY)||"[]"); }catch{ return []; } }
-function saveRecents(arr){ try{ localStorage.setItem(RECENT_KEY, JSON.stringify(arr)); }catch{} }
-function currentNameTag(){ return (CURRENT.gameName && CURRENT.tagLine) ? `${CURRENT.gameName}#${CURRENT.tagLine}` : null; }
-function isPinned(nameTag, regionUI){ return loadPins().some(p => p.id===nameTag && p.regionUI===regionUI); }
-function onTogglePin(){
-  const id = currentNameTag(); if (!id) return;
-  const reg = safeRegionUI();
-  const pins = loadPins();
-  const idx = pins.findIndex(p => p.id===id && p.regionUI===reg);
-  if (idx !== -1) pins.splice(idx,1); else pins.unshift({ id, regionUI: reg, ts: Date.now() });
-  savePins(pins.slice(0,8));
-  updatePinButton(); renderQuicklists();
-}
-function updatePinButton(){
-  if (!btnPin) return;
-  const id = currentNameTag();
-  if (!id){ btnPin.disabled = true; btnPin.textContent = "☆ Pin"; return; }
-  btnPin.disabled = false;
-  const pinned = isPinned(id, safeRegionUI());
-  btnPin.textContent = pinned ? "★ Unpin" : "☆ Pin";
-  btnPin.title = pinned ? "Unpin this profile" : "Pin this profile";
-}
-function pushRecent(nameTag, regionUI){
-  if (!nameTag) return;
-  const arr = loadRecents().filter(x => !(x.id===nameTag && x.regionUI===regionUI));
-  arr.unshift({ id:nameTag, regionUI, ts: Date.now() });
-  saveRecents(arr.slice(0,8));
-}
-function renderQuicklists(){
-  if (pinsList) {
-    const pins = loadPins();
-    pinsList.innerHTML = pins.length ? pins.map(x=>{
-      const url = new URL("./app.html", location.href);
-      url.searchParams.set("id", x.id); url.searchParams.set("region", x.regionUI);
-      return `<a href="${url.toString()}" class="link-chip" title="${x.id} (${x.regionUI})">${x.id}</a>`;
-    }).join("") : `<div class="muted small">No pinned profiles</div>`;
-  }
-  if (recentsList) {
-    const recs = loadRecents();
-    recentsList.innerHTML = recs.length ? recs.map(x=>{
-      const url = new URL("./app.html", location.href);
-      url.searchParams.set("id", x.id); url.searchParams.set("region", x.regionUI);
-      return `<a href="${url.toString()}" class="link-chip" title="${x.id} (${x.regionUI})">${x.id}</a>`;
-    }).join("") : `<div class="muted small">No recent profiles</div>`;
-  }
-}
-
-// Cache
-function loadCache(puuid){ try { return JSON.parse(localStorage.getItem(cacheKey(puuid))||"null"); } catch { return null; } }
-function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
-
-// Prefill
-(function prefillFromURL(){
-  const u = new URL(location.href);
-  const id = u.searchParams.get('id');
-  const region = u.searchParams.get('region');
-  if (region && regionSelect) regionSelect.value = region.toUpperCase();
-  if (id && riotIdInput && id.includes('#')) {
-    riotIdInput.value = id;
-    setTimeout(()=> startSearch(new Event('submit')), 0);
-  }
-  renderQuicklists();
-})();
-
-// Tabs
-if (tabsNav) {
-  tabsNav.addEventListener("click", (e)=>{
+// ---- Tabs ----
+if (tabs) {
+  tabs.addEventListener("click", (e)=>{
     const btn = e.target.closest("button"); if (!btn) return;
     const key = btn.dataset.tab;
-    [...tabsNav.querySelectorAll("button")].forEach(b=>{
+    [...tabs.querySelectorAll("button")].forEach(b=>{
       const active = b === btn;
       b.classList.toggle("active", active);
       b.setAttribute("aria-selected", active ? "true" : "false");
     });
-    Object.entries(tabViews).forEach(([k, el])=>{
-      if (!el) return;
-      el.classList.toggle("active", k === key);
-    });
+    for (const [k, el] of Object.entries(tabViews)) if (el) el.classList.toggle("active", k===key);
   });
 }
 
-// Listeners
-if (form) form.addEventListener("submit", onSearch, { capture: true });
-if (btnSearch) btnSearch.addEventListener("click", (e)=>{ e.preventDefault(); onSearch(e); });
-// Update: Shift+click = full refresh; normal click = incremental
-if (btnUpdate) btnUpdate.addEventListener("click", (e) => refresh({ full: e.shiftKey }));
-if (btnPin) btnPin.addEventListener("click", onTogglePin);
+// ---- Filters ----
+filters.addEventListener("click", (e)=>{
+  const btn = e.target.closest("button"); if (!btn) return;
+  [...filters.children].forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  CURRENT.filter = btn.dataset.filter;
+  renderHistory();
+});
+champInput.addEventListener("input", ()=>{ CURRENT.champQuery = (champInput.value || "").trim(); renderHistory(); });
+champClear.addEventListener("click", ()=>{ champInput.value=""; CURRENT.champQuery=""; renderHistory(); });
 
-if (filtersEl) {
-  filtersEl.addEventListener("click", (e)=>{
-    const btn = e.target.closest("button"); if (!btn) return;
-    [...filtersEl.children].forEach(b=>b.classList.remove("active"));
-    btn.classList.add("active");
-    CURRENT.filter = btn.dataset.filter;
-    renderHistory();
-  });
+// ---- Actions ----
+form.addEventListener("submit", onSearch);
+btnUpdate.addEventListener("click", () => refresh(true));
+matchesBox.addEventListener("click", (e)=>{
+  const card = e.target.closest(".item");
+  if (!card) return;
+  const id = card.dataset.id;
+  const base = new URL(location.href.replace(/[^/]*$/, ""));
+  const url = new URL("match.html", base);
+  url.searchParams.set("id", id);
+  url.searchParams.set("puuid", CURRENT.puuid || "");
+  url.searchParams.set("region", CURRENT.region || "");
+  location.href = url.toString();
+});
+
+// ---- Helpers ----
+function champIcon(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`; }
+function splashUrl(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${encodeURIComponent(fixed)}_0.jpg`; }
+function itemIcon(id){ return !id||id===0 ? "" : `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/item/${id}.png`; }
+function itemName(id){ const rec = ITEM_DB.byId?.[String(id)]; return rec ? rec.name : `Item ${id}`; }
+function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "?"; return `${n}th`; }
+function timeAgo(ts){ if(!ts) return "unknown"; const s=Math.max(1,Math.floor((Date.now()-Number(ts))/1000)); const m=Math.floor(s/60); if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<48) return `${h}h ago`; const d=Math.floor(h/24); return `${d}d ago`; }
+function status(t){ statusBox.textContent = t||""; }
+function setLastUpdated(ts){ lastUpdatedEl.textContent = ts ? `Last updated, ${new Date(ts).toLocaleString()}` : ""; }
+
+async function fetchJSON(url, tries=3, delay=600){
+  const r = await fetch(url);
+  if (r.ok) return r.json();
+  const txt = await r.text().catch(()=> "");
+  const is429 = r.status===429 || /Riot 429/i.test(txt);
+  if (is429 && tries>0){ await new Promise(r=>setTimeout(r, delay)); return fetchJSON(url, tries-1, delay*2); }
+  throw new Error(`Request failed, ${r.status}${txt?`, ${txt}`:""}`);
 }
-if (champInput) champInput.addEventListener("input", ()=>{ CURRENT.champQuery = (champInput.value || "").trim(); renderHistory(); });
-if (champClear) champClear.addEventListener("click", ()=>{ if (champInput) champInput.value=""; CURRENT.champQuery=""; renderHistory(); });
-
-// History → match.html
-if (matchesBox) {
-  matchesBox.addEventListener("click", (e)=>{
-    const card = e.target.closest(".item"); if (!card) return;
-    const id = card.dataset.id;
-    const base = new URL(location.href.replace(/[^/]*$/, ""));
-    const url = new URL("match.html", base);
-    url.searchParams.set("id", id);
-    url.searchParams.set("puuid", CURRENT.puuid || "");
-    url.searchParams.set("region", CURRENT.region || "");
-    location.href = url.toString();
-  });
+async function initDDragon(){
+  try {
+    const r = await fetch("https://ddragon.leagueoflegends.com/api/versions.json");
+    if (r.ok){ const arr = await r.json(); if (arr?.[0]) DD_VERSION = arr[0]; }
+  } catch {}
+  try {
+    const r = await fetch(`https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/data/en_US/item.json`);
+    if (r.ok){ const data = await r.json(); ITEM_DB.byId = data.data || {}; }
+  } catch {}
 }
+function loadCache(puuid){ try { return JSON.parse(localStorage.getItem(cacheKey(puuid))||"null"); } catch { return null; } }
+function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
+function createStatus(){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; document.body.prepend(el); return el; }
+function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
 
-// Expose for inline
-window.startSearch = function startSearch(e){
-  try { if (e && e.preventDefault) { e.preventDefault(); e.stopPropagation?.(); e.stopImmediatePropagation?.(); } } catch {}
-  onSearch(e);
-  return false;
-};
+// ---- Progress UI helpers ----
+function showIndeterminate(msg){ progressWrap.hidden=false; progressBar.classList.add('indeterminate'); progressBar.style.width='100%'; progressText.textContent=msg||'Working…'; }
+function showDeterminate(msg,pct){ progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
+function hideProgress(){ progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
 
-// Search
-async function onSearch(e){
-  if (e){ e.preventDefault?.(); e.stopPropagation?.(); e.stopImmediatePropagation?.(); }
-
-  const raw = riotIdInput?.value ?? "";
-  const parsed = parseRiotId(raw);
-  if (!parsed){ alert('Use "Name#TAG" or "Name TAG"'); return; }
-
-  await initDDragon();
-
-  try{
-    showIndeterminate("Looking up account…");
-
-    const acc = await fetchJSON(
-      api(`/account?gameName=${encodeURIComponent(parsed.gameName)}&tagLine=${encodeURIComponent(parsed.tagLine)}`),
-      4, 700, 10000 // tries, delay, timeout per try
-    );
-    const regionRouting = mapRegionUItoRouting(safeRegionUI());
-
-    const cached = loadCache(acc.puuid);
-    if (cached?.matches?.length){
-      Object.assign(CURRENT, {
-        gameName: acc.gameName, tagLine: acc.tagLine, puuid: acc.puuid,
-        matches: cached.matches, ids: cached.ids||[], region: cached.region || regionRouting,
-        lastUpdated: cached.updatedAt || null,
-      });
-      populateChampionDatalist(); renderAll(); setLastUpdated(cached.updatedAt);
-      hideProgress(); pushRecent(`${acc.gameName}#${acc.tagLine}`, safeRegionUI()); renderQuicklists(); updatePinButton();
-      status(""); // clear status if any
-      return;
-    }
-
-    Object.assign(CURRENT, {
-      gameName: acc.gameName, tagLine: acc.tagLine, puuid: acc.puuid,
-      matches: [], ids: [], lastUpdated: null, region: regionRouting,
-    });
-    pushRecent(`${acc.gameName}#${acc.tagLine}`, safeRegionUI()); renderQuicklists(); updatePinButton();
-
-    await refresh({ full: true }); // first time
-    status("");
-  } catch(err){
-    console.error(err);
-    status(friendly(err));
-    hideProgress(); // <- ensure spinner hides on any failure
+// ---- URL prefill & auto-run ----
+function prefillFromURL(){
+  const u = new URL(location.href);
+  const id = u.searchParams.get('id');
+  const region = u.searchParams.get('region');
+  if (region) regionSelect.value = region.toUpperCase();
+  if (id && id.includes('#')) {
+    riotIdInput.value = id;
+    setTimeout(()=> form.dispatchEvent(new Event('submit', {cancelable:true})), 0);
   }
 }
 
-/**
- * Refresh:
- *  - full: true  → full history (first load or Shift+Update)
- *  - full: false → incremental: stop when we hit a known ID and fetch only the new ones
- */
-async function refresh({ full=false } = {}){
-  if (!CURRENT.puuid) return;
+// ---- Search / Refresh ----
+async function onSearch(e){
+  e.preventDefault();
+  const raw = riotIdInput.value.trim();
+  if (!raw.includes("#")) { alert("Use Name#TAG"); return; }
+  const [gameName, tagLine] = raw.split("#");
+  await initDDragon();
 
   try{
-    if (full) showIndeterminate("Refreshing full history…");
-    else showIndeterminate("Checking for new matches…");
+    status("Looking up account…");
+    const acc = await fetchJSON(api(`/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`));
+    CURRENT.gameName = acc.gameName; CURRENT.tagLine = acc.tagLine; CURRENT.puuid = acc.puuid;
 
-    const knownIdSet = new Set(
-      (CURRENT.ids && CURRENT.ids.length ? CURRENT.ids : CURRENT.matches.map(m=>m.matchId)).filter(Boolean)
-    );
-
-    let allIds = [];
-    let newIds = [];
-
-    // 1) fetch IDs
-    if (full || knownIdSet.size === 0){
-      let start = 0;
-      for (;;) {
-        progressText && (progressText.textContent = `Fetching match IDs… ${start}–${start + PAGE_SIZE - 1}`);
-        const ids = await fetchJSON(
-          api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`),
-          4, 700, 12000
-        );
-        if (!ids.length) break;
-        allIds.push(...ids);
-        start += ids.length;
-        if (ids.length < PAGE_SIZE) break;
-        await new Promise(r=>setTimeout(r, IDS_PAGE_DELAY));
-      }
+    const cached = loadCache(acc.puuid);
+    if (cached?.matches){
+      Object.assign(CURRENT, { matches: cached.matches, ids: cached.ids||[], region: cached.region||null, lastUpdated: cached.updatedAt||null });
+      populateChampionDatalist();
+      renderAll(); setLastUpdated(cached.updatedAt); status("Refreshing full history…");
     } else {
-      // incremental
-      let start = 0; let stop = false;
-      while(!stop){
-        const ids = await fetchJSON(
-          api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`),
-          4, 700, 12000
-        );
-        if (!ids.length){ break; }
-        for (const id of ids){
-          if (knownIdSet.has(id)){ stop = true; break; }
-          newIds.push(id);
-        }
-        if (ids.length < PAGE_SIZE) break;
-        if (!stop) start += ids.length;
-        await new Promise(r=>setTimeout(r, IDS_PAGE_DELAY));
-      }
-      allIds = newIds.concat(CURRENT.ids || []);
+      Object.assign(CURRENT, { matches: [], ids: [], region: null, lastUpdated: null });
     }
 
-    // 2) details only for new
-    const knownMatchSet = new Set(CURRENT.matches.map(m=>m.matchId));
-    const toFetch = (full ? allIds : newIds).filter(id => !knownMatchSet.has(id));
+    CURRENT.region = mapRegionUItoRouting(regionSelect.value);
+    await refresh(true);
+  } catch(err){ console.error(err); status(err.message || "Error"); hideProgress(); }
+}
 
-    if (toFetch.length === 0){
-      hideProgress();
-      setLastUpdated(Date.now());
-      CURRENT.ids = allIds.slice();
-      saveCache(CURRENT.puuid, { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() });
-      status("Up to date.");
-      setTimeout(()=>status(""), 1500);
-      return;
+async function refresh(full){
+  if (!CURRENT.puuid) return;
+  try{
+    // 1) Get ALL Ids
+    showIndeterminate("Fetching match IDs…");
+    let allIds = [];
+    let start = 0;
+    for (;;) {
+      progressText.textContent = `Fetching match IDs… ${start}–${start + PAGE_SIZE - 1}`;
+      const ids = await fetchJSON(api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`));
+      if (!ids.length) break;
+      allIds.push(...ids);
+      start += ids.length;
+      if (ids.length < PAGE_SIZE) break;
+      await new Promise(r=>setTimeout(r, IDS_PAGE_DELAY));
     }
+    CURRENT.ids = allIds.slice();
 
+    // 2) Fetch details in safe 10-id chunks
+    const known = new Set(CURRENT.matches.map(m=>m.matchId));
+    const toFetch = allIds.filter(id=>!known.has(id));
     const total = toFetch.length;
     let fetched = 0;
     showDeterminate(`Fetching match details… 0 / ${total}`, 0);
@@ -412,46 +216,38 @@ async function refresh({ full=false } = {}){
     let collected = [];
     for (let i=0;i<toFetch.length;i+=CHUNK_SIZE){
       const slice = toFetch.slice(i, i+CHUNK_SIZE);
-      const part = await fetchJSON(
-        api(`/matches?ids=${slice.join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`),
-        4, 700, 12000
-      );
+      const part = await fetchJSON(api(`/matches?ids=${slice.join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`));
       collected = collected.concat(part);
       fetched += slice.length;
       const pct = total ? Math.round((100*fetched)/total) : 100;
       showDeterminate(`Fetching match details… ${Math.min(fetched,total)} / ${total}`, pct);
+      renderHistory(dedupeById(CURRENT.matches.concat(collected)).sort((a,b)=>b.gameStart-a.gameStart));
     }
 
-    if (full){
-      CURRENT.matches = dedupeById(collected).sort((a,b)=>b.gameStart-a.gameStart);
-      CURRENT.ids = allIds.slice();
-    } else {
-      const merged = dedupeById(collected.concat(CURRENT.matches)).sort((a,b)=>b.gameStart-a.gameStart);
-      CURRENT.matches = merged;
-      CURRENT.ids = allIds.slice();
-    }
+    // 3) Merge + cache + render
+    CURRENT.matches = dedupeById(collected.concat(CURRENT.matches)).sort((a,b)=>b.gameStart-a.gameStart);
 
     const payload = { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() };
     saveCache(CURRENT.puuid, payload);
     setLastUpdated(payload.updatedAt);
 
-    populateChampionDatalist(); renderAll();
+    populateChampionDatalist();
+    renderAll();
     hideProgress();
     status("");
   } catch(err){
     console.error(err);
-    status(friendly(err));
+    status(err.message || "Refresh failed");
     hideProgress();
   }
 }
 
 function dedupeById(list){ const seen=new Set(); const out=[]; for (const m of list){ if(!m?.matchId||seen.has(m.matchId)) continue; seen.add(m.matchId); out.push(m);} return out; }
 
-// ===== Render =====
-function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); renderDuos(); updatePinButton(); }
+// ---- Renderers
+function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); renderDuos(); }
 
 function renderKPIs(){
-  if (!kpisBox) return;
   const list = CURRENT.matches;
   const places = list.map(m=>Number(m.placement)).filter(Number.isFinite);
   const avg = places.length ? (places.reduce((a,b)=>a+b,0)/places.length).toFixed(2) : "0.00";
@@ -468,8 +264,6 @@ function renderKPIs(){
 }
 
 function renderSidebar(){
-  if (!winsChecklist || !hardestList || !placementsCanvas) return;
-
   const byChamp = groupBy(CURRENT.matches, m=>m.championName);
   const rows = Object.keys(byChamp)
     .filter(name => byChamp[name].some(m=>m.placement===1))
@@ -495,9 +289,8 @@ function renderSidebar(){
   if (placementsCanvas) drawPlacementBars(placementsCanvas, counts);
 }
 
-function renderHistory(){
-  if (!matchesBox) return;
-  const listAll = CURRENT.matches.slice();
+function renderHistory(forcedList){
+  const listAll = (forcedList || CURRENT.matches).slice();
   let list = listAll;
   if (CURRENT.filter === "wins") list = listAll.filter(m=>m.placement===1);
   else if (CURRENT.filter === "neverwon") {
@@ -512,27 +305,37 @@ function renderHistory(){
 
   matchesBox.innerHTML = list.map(m=>{
     const p=Number(m.placement); const cls=p===1?"p1":p===2?"p2":p===3?"p3":"px";
-    const allyChip = m.allyChampionName
-      ? `<span class="ally-chip" title="Duo: ${m.allyChampionName}"><img src="${champIcon(m.allyChampionName)}" alt="${m.allyChampionName}"></span>`
+    const allyIcon = m.allyChampionName ? `
+      <div class="ally-chip" title="${m.allyChampionName}">
+        <img src="${champIcon(m.allyChampionName)}" alt="${m.allyChampionName}">
+      </div>` : "";
+
+    const allyBadge = Number.isFinite(m.allyPlacement||p)
+      ? `<span class="badge sm ${cls}" title="Duo placement">${ordinal(m.allyPlacement||p)}</span>`
       : "";
-    const bg = loadingArt(m.championName, 0);
-    return `<article class="item" data-id="${m.matchId}" style="--splash:url('${bg}')">
+
+    const items = [m.item0,m.item1,m.item2,m.item3,m.item4,m.item5,m.item6]
+      .filter(v => Number.isFinite(v) && v>0)
+      .map(id => `<img src="${itemIcon(id)}" alt="${id}" title="${itemName(id)}">`).join("");
+
+    return `<article class="item" data-id="${m.matchId}" style="--splash:url('${splashUrl(m.championName)}')">
       <div class="icon icon-lg">
-        <img src="${champIcon(m.championName)}" alt="${m.championName}">${allyChip}
+        <img src="${champIcon(m.championName)}" alt="${m.championName}">
+        ${allyIcon}
       </div>
       <div>
         <div class="head">
           <strong>${m.championName}</strong>
-          <span class="badge ${cls}">${ordinal(p)}</span>
+          <span class="badge ${cls}" title="Your placement">${ordinal(p)}</span>
         </div>
-        <div class="small">KDA ${m.kills}/${m.deaths}/${m.assists} • ${timeAgo(m.gameStart)}</div>
+        <div class="small">KDA ${m.kills}/${m.deaths}/${m.assists} · Played ${timeAgo(m.gameStart)} ${allyBadge ? "· " + allyBadge : ""}</div>
+        <div class="items">${items || `<span class="muted small">No items</span>`}</div>
       </div>
     </article>`;
   }).join("");
 }
 
 function renderSynergy(){
-  if (!synergyTableBody || !bestDuoEl || !commonDuoEl) return;
   const agg = {};
   for (const m of CURRENT.matches){
     const ally = m.allyChampionName || "Unknown";
@@ -543,17 +346,19 @@ function renderSynergy(){
     .filter(x=>x.ally!=="Unknown")
     .map(x=>({ ...x, wr: x.games ? Math.round((100*x.wins)/x.games) : 0, avg: x.games ? (x.sumPlace/x.games).toFixed(2) : "—" }));
 
-  const enough = rows.filter(x => x.games >= 5);
-  const best = enough.slice().sort((a,b)=> b.wr - a.wr || b.games - a.games)[0];
-  const common = rows.slice().sort((a,b)=> b.games - a.games)[0];
+  if (bestDuoEl && commonDuoEl) {
+    const enough = rows.filter(x => x.games >= 5);
+    const best = enough.slice().sort((a,b)=> b.wr - a.wr || b.games - a.games)[0];
+    const common = rows.slice().sort((a,b)=> b.games - a.games)[0];
 
-  bestDuoEl.innerHTML = best
-    ? `<img src="${champIcon(best.ally)}" alt="${best.ally}">${best.ally} • ${best.wr}% WR (${best.games} games)`
-    : `<span class="muted">Not enough games yet</span>`;
+    bestDuoEl.innerHTML = best
+      ? `<img src="${champIcon(best.ally)}" alt="${best.ally}">${best.ally} • ${best.wr}% WR (${best.games} games)`
+      : `<span class="muted">Not enough games yet</span>`;
 
-  commonDuoEl.innerHTML = common
-    ? `<img src="${champIcon(common.ally)}" alt="${common.ally}">${common.ally} • ${common.games} games`
-    : `<span class="muted">No duo games yet</span>`;
+    commonDuoEl.innerHTML = common
+      ? `<img src="${champIcon(common.ally)}" alt="${common.ally}">${common.ally} • ${common.games} games`
+      : `<span class="muted">No duo games yet</span>`;
+  }
 
   synergyTableBody.innerHTML = rows.length
     ? rows.sort((a,b)=> b.wr - a.wr).map(x=>`
@@ -564,10 +369,8 @@ function renderSynergy(){
     : `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
 }
 
-// Best Duo Partners — clickable names
+// Best Duo Partners (by player; group by allyPuuid)
 function renderDuos(){
-  if (!duoTableBody) return;
-
   const agg = new Map();
   const nameMap = new Map();
 
@@ -583,17 +386,16 @@ function renderDuos(){
   }
 
   const rows = [...agg.values()].map(s => {
-    const displayName = s.puuid ? (nameMap.get(s.puuid) || s.display || "Unknown") : s.display;
+    const name = s.puuid ? (nameMap.get(s.puuid) || s.display || "Unknown") : s.display;
     const wr = s.games ? Math.round((100*s.wins)/s.games) : 0;
     const avg = s.games ? (s.sumPlace/s.games).toFixed(2) : "—";
-    const href = (displayName && displayName.includes("#")) ? profileHref(displayName) : null;
-    return { name: displayName, href, games: s.games, wins: s.wins, wr, avg };
+    return { name, games: s.games, wins: s.wins, wr, avg };
   }).sort((a,b)=> b.games - a.games);
 
   duoTableBody.innerHTML = rows.length
     ? rows.map(x => `
         <tr>
-          <td>${x.href ? `<a class="link" href="${x.href}">${x.name}</a>` : x.name}</td>
+          <td>${x.name}</td>
           <td>${x.games}</td>
           <td>${x.wins}</td>
           <td>${x.wr}%</td>
@@ -602,14 +404,7 @@ function renderDuos(){
     : `<tr><td colspan="5" class="muted">No duo partners found.</td></tr>`;
 }
 
-// Helpers
-function profileHref(nameTag){
-  const base = new URL(location.href.replace(/[^/]*$/, ""));
-  const url = new URL("app.html", base);
-  url.searchParams.set("id", nameTag);
-  url.searchParams.set("region", safeRegionUI());
-  return url.toString();
-}
+// ---- Utils
 function buildProgress(matches){
   const byChamp = groupBy(matches, m=>m.championName);
   const out = {};
@@ -623,20 +418,21 @@ function buildProgress(matches){
   }
   return out;
 }
+
 function populateChampionDatalist(){
-  if (!champDatalist) return;
   const set = new Set(CURRENT.matches.map(m=>m.championName).filter(Boolean));
   const opts = [...set].sort((a,b)=>a.localeCompare(b)).map(c=>`<option value="${c}">`).join("");
   champDatalist.innerHTML = opts;
 }
+
 function groupBy(list, fn){ const map={}; for(const x of list){ const k=fn(x); (map[k] ||= []).push(x); } return map; }
 function tile(big,label){ return `<div class="tile"><div class="big">${big}</div><div class="label muted">${label}</div></div>`; }
+
 function drawPlacementBars(canvas, counts){
   const ctx = canvas.getContext("2d"); if(!ctx) return;
-  const W = canvas.width, H = canvas.height;
+  const W=canvas.width, H=canvas.height;
   ctx.clearRect(0,0,W,H);
 
-  // grid + y labels
   ctx.strokeStyle = "#2a3340"; ctx.lineWidth = 1;
   const max = Math.max(1, ...counts);
   const top = Math.ceil(max / 2) * 2;
@@ -644,19 +440,13 @@ function drawPlacementBars(canvas, counts){
   for (let y=0; y<=top; y+=step){
     const yy = H - 20 - (H-40) * (y/top);
     ctx.beginPath(); ctx.moveTo(40, yy); ctx.lineTo(W-10, yy); ctx.stroke();
-    ctx.fillStyle = "#7f8c8d"; ctx.font = "12px system-ui";
-    ctx.textAlign = "left";                       // left-align only for axis numbers
-    ctx.fillText(String(y), 10, yy+4);
+    ctx.fillStyle = "#7f8c8d"; ctx.font="12px system-ui"; ctx.fillText(String(y), 10, yy+4);
   }
 
   const colors = ["#ffd95e","#6eb4ff","#ffb26b","#b9c2cc","#b9c2cc","#b9c2cc","#b9c2cc","#b9c2cc"];
   const n = counts.length;
   const slotW = (W-60)/n;
   const bw = slotW * 0.7;
-
-  // center-align for bar labels
-  ctx.textAlign = "center";
-  ctx.textBaseline = "alphabetic";
 
   for (let i=0;i<n;i++){
     const x = 40 + i*slotW + (slotW-bw)/2;
@@ -668,7 +458,11 @@ function drawPlacementBars(canvas, counts){
 
     ctx.fillStyle = "#cfd9df";
     ctx.font = "bold 14px system-ui";
-    ctx.fillText(String(counts[i]), x + bw/2, y - 6);          // centered above bar
-    ctx.fillText(`${i+1}${["st","nd","rd"][i]||"th"}`, x + bw/2, H - 6); // centered under bar
+    // push a tiny bit left for better centering
+    ctx.fillText(String(counts[i]), x + bw/2 - 6, y - 4);
+    ctx.fillText(`${i+1}${["st","nd","rd"][i]||"th"}`, x + bw/2 - 12, H - 4);
   }
 }
+
+// kick off
+prefillFromURL();
