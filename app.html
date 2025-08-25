@@ -3,30 +3,32 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>LeagueArena.gg — Profile</title>
-  <link rel="stylesheet" href="styles.css?v=revamp10" />
+  <title>ARenas.gg — Profile</title>
+  <link rel="icon" type="image/png" href="logo-ar-icon.png" />
+  <link rel="stylesheet" href="styles.css?v=build9" />
 </head>
 <body>
   <header class="topbar">
     <div class="container">
-      <a class="brand" href="./"><img src="logo.svg" alt="LeagueArena.gg"></a>
-
+      <!-- Novo ícone no topo -->
+      <a class="brand" href="./" title="ARenas.gg">
+        <img src="logo-ar-icon.png" alt="ARenas.gg">
+      </a>
       <nav class="tabs" id="tabs">
         <button data-tab="matches" class="active">Overview & History</button>
         <button data-tab="synergy">Duo Synergies</button>
         <button data-tab="duos">Best Duo Partners</button>
       </nav>
-
       <form id="search-form" class="search">
-        <select id="region-select" aria-label="Region">
+        <select id="region-select">
           <option>NA</option>
           <option selected>EUW</option>
           <option>EUNE</option>
         </select>
-        <input id="riotid" placeholder="Riot ID (Name#TAG)" aria-label="Riot ID" />
-        <button id="btn-search" type="submit">Search</button>
+        <input id="riotid" placeholder="Riot ID (Name#TAG)" />
+        <button type="submit">Search</button>
         <button type="button" id="btn-update" class="ghost">Update</button>
-        <button type="button" id="btn-pin">☆ Pin</button>
+        <button type="button" id="btn-pin" class="ghost">☆ Pin</button>
       </form>
     </div>
   </header>
@@ -36,13 +38,13 @@
     <div class="progress-text" id="progress-text">Preparing…</div>
   </div>
 
-  <main class="container layout" id="main-layout">
+  <main class="container layout">
     <aside class="sidebar">
       <section class="card">
         <h3>Pinned & Recent</h3>
-        <div class="section-title" style="margin-bottom:6px"><small class="muted">Pinned</small></div>
-        <div id="pins-list" class="links-list"></div>
-        <div class="section-title" style="margin-top:10px;margin-bottom:6px"><small class="muted">Recent</small></div>
+        <div class="muted small">Pinned</div>
+        <div id="pins-list" class="links-list"><div class="muted small">No pinned profiles</div></div>
+        <div class="muted small" style="margin-top:8px">Recent</div>
         <div id="recents-list" class="links-list"></div>
       </section>
 
@@ -76,9 +78,9 @@
           <button data-filter="wins">1st place</button>
           <button data-filter="neverwon">Never won</button>
           <div class="champ-filter">
-            <input id="champ-input" list="champ-datalist" placeholder="Filter by champion…" aria-label="Filter by champion" />
+            <input id="champ-input" list="champ-datalist" placeholder="Filter by champion…" />
             <datalist id="champ-datalist"></datalist>
-            <button id="champ-clear" class="ghost sm" type="button">Clear</button>
+            <button id="champ-clear" class="ghost sm">Clear</button>
           </div>
         </div>
 
@@ -127,6 +129,6 @@
     <div class="container muted">Powered by Riot Games API • Icons by Data Dragon</div>
   </footer>
 
-  <script type="module" src="app.js?v=revamp10"></script>
+  <script type="module" src="app.js?v=build9"></script>
 </body>
 </html>
