@@ -633,8 +633,10 @@ function groupBy(list, fn){ const map={}; for(const x of list){ const k=fn(x); (
 function tile(big,label){ return `<div class="tile"><div class="big">${big}</div><div class="label muted">${label}</div></div>`; }
 function drawPlacementBars(canvas, counts){
   const ctx = canvas.getContext("2d"); if(!ctx) return;
-  const W=canvas.width, H=canvas.height;
+  const W = canvas.width, H = canvas.height;
   ctx.clearRect(0,0,W,H);
+
+  // grid + y labels
   ctx.strokeStyle = "#2a3340"; ctx.lineWidth = 1;
   const max = Math.max(1, ...counts);
   const top = Math.ceil(max / 2) * 2;
@@ -642,19 +644,31 @@ function drawPlacementBars(canvas, counts){
   for (let y=0; y<=top; y+=step){
     const yy = H - 20 - (H-40) * (y/top);
     ctx.beginPath(); ctx.moveTo(40, yy); ctx.lineTo(W-10, yy); ctx.stroke();
-    ctx.fillStyle = "#7f8c8d"; ctx.font="12px system-ui"; ctx.fillText(String(y), 10, yy+4);
+    ctx.fillStyle = "#7f8c8d"; ctx.font = "12px system-ui";
+    ctx.textAlign = "left";                       // left-align only for axis numbers
+    ctx.fillText(String(y), 10, yy+4);
   }
+
   const colors = ["#ffd95e","#6eb4ff","#ffb26b","#b9c2cc","#b9c2cc","#b9c2cc","#b9c2cc","#b9c2cc"];
   const n = counts.length;
   const slotW = (W-60)/n;
   const bw = slotW * 0.7;
+
+  // center-align for bar labels
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+
   for (let i=0;i<n;i++){
     const x = 40 + i*slotW + (slotW-bw)/2;
     const h = (H-40) * (counts[i]/top);
     const y = H - 20 - h;
-    ctx.fillStyle = colors[i]; ctx.fillRect(x, y, bw, h);
-    ctx.fillStyle = "#cfd9df"; ctx.font = "bold 14px system-ui";
-    ctx.fillText(String(counts[i]), x + bw/2 - 4, y - 4);
-    ctx.fillText(`${i+1}${["st","nd","rd"][i]||"th"}`, x + bw/2 - 10, H - 4);
+
+    ctx.fillStyle = colors[i];
+    ctx.fillRect(x, y, bw, h);
+
+    ctx.fillStyle = "#cfd9df";
+    ctx.font = "bold 14px system-ui";
+    ctx.fillText(String(counts[i]), x + bw/2, y - 6);          // centered above bar
+    ctx.fillText(`${i+1}${["st","nd","rd"][i]||"th"}`, x + bw/2, H - 6); // centered under bar
   }
 }
