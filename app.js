@@ -305,18 +305,16 @@ function renderHistory(forcedList){
 
   matchesBox.innerHTML = list.map(m=>{
     const p=Number(m.placement); const cls=p===1?"p1":p===2?"p2":p===3?"p3":"px";
+
     const allyIcon = m.allyChampionName ? `
       <div class="ally-chip" title="${m.allyChampionName}">
         <img src="${champIcon(m.allyChampionName)}" alt="${m.allyChampionName}">
       </div>` : "";
 
-    const allyBadge = Number.isFinite(m.allyPlacement||p)
-      ? `<span class="badge sm ${cls}" title="Duo placement">${ordinal(m.allyPlacement||p)}</span>`
-      : "";
-
+    // items (pequenos)
     const items = [m.item0,m.item1,m.item2,m.item3,m.item4,m.item5,m.item6]
       .filter(v => Number.isFinite(v) && v>0)
-      .map(id => `<img src="${itemIcon(id)}" alt="${id}" title="${itemName(id)}">`).join("");
+      .map(id => `<img src="${itemIcon(id)}" alt="${id}" title="${itemName(id)}" style="width:18px;height:18px;border-radius:4px;border:1px solid var(--border);margin-right:4px">`).join("");
 
     return `<article class="item" data-id="${m.matchId}" style="--splash:url('${splashUrl(m.championName)}')">
       <div class="icon icon-lg">
@@ -326,9 +324,9 @@ function renderHistory(forcedList){
       <div>
         <div class="head">
           <strong>${m.championName}</strong>
-          <span class="badge ${cls}" title="Your placement">${ordinal(p)}</span>
+          <span class="badge ${cls}" title="Final placement">${ordinal(p)}</span>
         </div>
-        <div class="small">KDA ${m.kills}/${m.deaths}/${m.assists} · Played ${timeAgo(m.gameStart)} ${allyBadge ? "· " + allyBadge : ""}</div>
+        <div class="small">KDA ${m.kills}/${m.deaths}/${m.assists} · Played ${timeAgo(m.gameStart)}</div>
         <div class="items">${items || `<span class="muted small">No items</span>`}</div>
       </div>
     </article>`;
@@ -458,7 +456,6 @@ function drawPlacementBars(canvas, counts){
 
     ctx.fillStyle = "#cfd9df";
     ctx.font = "bold 14px system-ui";
-    // push a tiny bit left for better centering
     ctx.fillText(String(counts[i]), x + bw/2 - 6, y - 4);
     ctx.fillText(`${i+1}${["st","nd","rd"][i]||"th"}`, x + bw/2 - 12, H - 4);
   }
