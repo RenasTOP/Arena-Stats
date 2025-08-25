@@ -3,13 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Arena.gg — Match</title>
-  <link rel="stylesheet" href="styles.css?v=build12" />
+  <title>ARenas.gg — Match</title>
+  <link rel="icon" type="image/png" href="logo-ar-icon.png" />
+  <link rel="stylesheet" href="styles.css?v=match-cdragon" />
 </head>
 <body>
   <header class="topbar">
     <div class="container">
-      <h1 class="brand">Arena.gg</h1>
+      <a class="brand" href="./" title="ARenas.gg">
+        <img src="logo-ar-icon.png" alt="ARenas.gg">
+      </a>
       <a class="ghost" href="./" id="back-link">← Back</a>
     </div>
   </header>
@@ -17,7 +20,14 @@
   <main class="container">
     <section id="match-card" class="card"></section>
 
-    <!-- Compacto: uma única tabela com tudo -->
+    <section class="card">
+      <div class="section-title">
+        <h3>Teams</h3>
+        <small class="muted">Ordered by final placement</small>
+      </div>
+      <div id="teams" class="teams-grid"></div>
+    </section>
+
     <section class="card" id="table-wrap">
       <div class="section-title">
         <h3>All participants</h3>
@@ -34,9 +44,9 @@
               <th>Player</th>
               <th>Champion</th>
               <th>Place</th>
-              <th title="Kills / Deaths / Assists">K / D / A</th>
-              <th title="Gold earned (hover for GPM)">Gold</th>
-              <th title="Damage to champions (hover for team share)">Damage</th>
+              <th>K / D / A</th>
+              <th>Gold</th>
+              <th>Damage</th>
               <th>Items</th>
               <th>Augments</th>
             </tr>
@@ -51,6 +61,6 @@
     <div class="container muted">Powered by Riot Games API • icons by Data Dragon • @renas2g</div>
   </footer>
 
-  <script type="module" src="match.js?v=compact2"></script>
+  <script type="module" src="match.js?v=match-cdragon"></script>
 </body>
 </html>
