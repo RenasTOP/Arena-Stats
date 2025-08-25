@@ -22,6 +22,9 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-appl
 }
 .tabs button:hover{transform:translateY(-1px)}
 .tabs button.active{background:var(--green);color:#fff;box-shadow:0 3px 10px rgba(35,134,54,.35)}
+/* 👇 estas duas linhas fazem os botões “funcionarem” (esconde/mostra cada tab) */
+.tab{display:none}
+.tab.active{display:block}
 
 /* Search */
 .search{display:flex;gap:8px}
