@@ -4,6 +4,11 @@
   --bg:#0f1216; --panel:#0f141b; --text:#e6edf3; --muted:#9aa4ad; --border:#2d333b;
   --green:#238636; --chip:#1b2330;
   --shadow: 0 6px 18px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.02) inset;
+
+  /* tweakables */
+  --splash-opacity: .06;    /* <= força da imagem de fundo nas match cards */
+  --splash-dark-a: .86;     /* <= opacidade lado esquerdo do gradiente escuro */
+  --splash-dark-b: .58;     /* <= opacidade lado direito do gradiente escuro */
 }
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
@@ -79,16 +84,22 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-appl
   display:grid;grid-template-columns:52px 1fr;gap:12px;cursor:pointer;transition:transform .08s ease, background .12s ease, box-shadow .12s ease;
   box-shadow:var(--shadow); overflow:hidden;
 }
-/* subtle splash background */
+/* splash background — now subtler & darker */
 .item::before{
   content:""; position:absolute; inset:0; pointer-events:none;
   background-image:var(--splash); background-size:cover; background-position:center;
-  opacity:.12; filter:saturate(.85) contrast(1.05);
+  opacity:var(--splash-opacity); filter:saturate(.85) contrast(1.02) brightness(.92);
+  transform:scale(1.02);
 }
-/* darken for readability */
+/* darken for readability (stronger than antes) */
 .item::after{
   content:""; position:absolute; inset:0; pointer-events:none;
-  background:linear-gradient(90deg, rgba(15,20,27,.65), rgba(15,20,27,.15));
+  background:linear-gradient(
+    90deg,
+    rgba(15,20,27,var(--splash-dark-a)) 0%,
+    rgba(15,20,27,calc(var(--splash-dark-a) - .1)) 40%,
+    rgba(15,20,27,var(--splash-dark-b)) 100%
+  );
 }
 .item > *{ position:relative } /* keep content above bg layers */
 
