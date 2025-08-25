@@ -1,5 +1,5 @@
-// Arena.gg — cache-first + incremental update + splash bg + resilient fetch (revamp12)
-console.log("app.js boot OK (revamp12)");
+// Arena.gg — cache-first + incremental update + splash bg + resilient fetch (revamp13)
+console.log("app.js boot OK (revamp13)");
 
 // ===== Config =====
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
@@ -91,28 +91,62 @@ function createStatus(txt){ const el=document.createElement("div"); el.id="statu
 function status(t){ if(statusBox) statusBox.textContent = t||""; }
 function setLastUpdated(ts){ if(lastUpdatedEl) lastUpdatedEl.textContent = ts ? `Last updated, ${new Date(ts).toLocaleString()}` : ""; }
 
-async function fetchJSON(url, tries=4, delay=700){
-  const r = await fetch(url);
-  if (r.ok) return r.json();
-
-  const txt = await r.text().catch(()=> "");
-  const status = r.status;
-  const is429 = status===429 || /Riot 429/i.test(txt);
-  const is5xx = (status>=500 && status<600) || /Riot 5\d{2}/i.test(txt);
-
-  if ((is429 || is5xx) && tries>0){
-    // exponential backoff + jitter
-    const jitter = Math.random()*400;
-    await new Promise(res=>setTimeout(res, delay + jitter));
-    return fetchJSON(url, tries-1, Math.min(delay*1.8, 6000));
+// --- fetch with hard timeout to avoid infinite spinners ---
+async function fetchWithTimeout(resource, { timeout=10000 } = {}){
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const resp = await fetch(resource, { signal: controller.signal });
+    return resp;
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      const e = new Error("Timeout");
+      e.code = "TIMEOUT";
+      throw e;
+    }
+    throw err;
+  } finally {
+    clearTimeout(id);
   }
+}
 
-  // bubble up with context (frontend will show friendly text)
-  throw new Error(`HTTP ${status}${txt?`: ${txt}`:""}`);
+async function fetchJSON(url, tries=4, delay=700, timeoutMs=10000){
+  try {
+    const r = await fetchWithTimeout(url, { timeout: timeoutMs });
+    if (r.ok) return r.json();
+
+    const txt = await r.text().catch(()=> "");
+    const status = r.status;
+    const is429 = status===429 || /Riot 429/i.test(txt);
+    const is5xx = (status>=500 && status<600) || /Riot 5\d{2}/i.test(txt);
+
+    if ((is429 || is5xx) && tries>0){
+      const jitter = Math.random()*400;
+      await new Promise(res=>setTimeout(res, delay + jitter));
+      return fetchJSON(url, tries-1, Math.min(delay*1.8, 6000), timeoutMs);
+    }
+    throw new Error(`HTTP ${status}${txt?`: ${txt}`:""}`);
+  } catch (err) {
+    // Timeout or network → retry if we still have tries
+    if ((err?.code === "TIMEOUT" || /TypeError: Failed to fetch/i.test(String(err))) && tries>0){
+      const jitter = Math.random()*400;
+      await new Promise(res=>setTimeout(res, delay + jitter));
+      // keep same timeout per try; or slightly increase if you want
+      return fetchJSON(url, tries-1, Math.min(delay*1.8, 6000), timeoutMs);
+    }
+    throw err;
+  }
 }
 
 async function initDDragon(){
-  try { const r = await fetch("https://ddragon.leagueoflegends.com/api/versions.json"); if (r.ok){ const arr = await r.json(); if (arr?.[0]) DD_VERSION = arr[0]; } } catch {}
+  // keep it non-blocking — if this stalls, we just fall back to default DD_VERSION
+  try {
+    const r = await fetchWithTimeout("https://ddragon.leagueoflegends.com/api/versions.json", { timeout: 5000 });
+    if (r.ok){
+      const arr = await r.json();
+      if (arr?.[0]) DD_VERSION = arr[0];
+    }
+  } catch {}
 }
 
 // Progress UI
@@ -123,6 +157,7 @@ function hideProgress(){ if(!progressWrap||!progressBar||!progressText) return; 
 // Friendly error mapper
 function friendly(err){
   const msg = String(err?.message||err||"");
+  if (/Timeout/i.test(msg)) return "Proxy request timed out. Try again.";
   if (/429/.test(msg)) return "Riot rate limit (429). Please wait a bit and try again.";
   if (/503|Service Unavailable/i.test(msg)) return "Riot API is temporarily unavailable (503). Try again in a minute.";
   if (/502|504|522|524/.test(msg)) return "Upstream temporarily unreachable. Retrying might help.";
@@ -268,7 +303,10 @@ async function onSearch(e){
   try{
     showIndeterminate("Looking up account…");
 
-    const acc = await fetchJSON(api(`/account?gameName=${encodeURIComponent(parsed.gameName)}&tagLine=${encodeURIComponent(parsed.tagLine)}`));
+    const acc = await fetchJSON(
+      api(`/account?gameName=${encodeURIComponent(parsed.gameName)}&tagLine=${encodeURIComponent(parsed.tagLine)}`),
+      4, 700, 10000 // tries, delay, timeout per try
+    );
     const regionRouting = mapRegionUItoRouting(safeRegionUI());
 
     const cached = loadCache(acc.puuid);
@@ -295,7 +333,7 @@ async function onSearch(e){
   } catch(err){
     console.error(err);
     status(friendly(err));
-    hideProgress();
+    hideProgress(); // <- ensure spinner hides on any failure
   }
 }
 
@@ -323,7 +361,10 @@ async function refresh({ full=false } = {}){
       let start = 0;
       for (;;) {
         progressText && (progressText.textContent = `Fetching match IDs… ${start}–${start + PAGE_SIZE - 1}`);
-        const ids = await fetchJSON(api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`));
+        const ids = await fetchJSON(
+          api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`),
+          4, 700, 12000
+        );
         if (!ids.length) break;
         allIds.push(...ids);
         start += ids.length;
@@ -334,7 +375,10 @@ async function refresh({ full=false } = {}){
       // incremental
       let start = 0; let stop = false;
       while(!stop){
-        const ids = await fetchJSON(api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`));
+        const ids = await fetchJSON(
+          api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`),
+          4, 700, 12000
+        );
         if (!ids.length){ break; }
         for (const id of ids){
           if (knownIdSet.has(id)){ stop = true; break; }
@@ -368,7 +412,10 @@ async function refresh({ full=false } = {}){
     let collected = [];
     for (let i=0;i<toFetch.length;i+=CHUNK_SIZE){
       const slice = toFetch.slice(i, i+CHUNK_SIZE);
-      const part = await fetchJSON(api(`/matches?ids=${slice.join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`));
+      const part = await fetchJSON(
+        api(`/matches?ids=${slice.join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`),
+        4, 700, 12000
+      );
       collected = collected.concat(part);
       fetched += slice.length;
       const pct = total ? Math.round((100*fetched)/total) : 100;
