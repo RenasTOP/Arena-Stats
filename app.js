@@ -1,5 +1,5 @@
-// Arena.gg — cache-first search, só faz fetch no "Update" ou se não houver cache
-console.log("app.js boot OK (v17 cache-first)");
+// Arena.gg — cache-first + tabs + duo links + small polish
+console.log("app.js boot OK (v18)");
 
 // ===== Config =====
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
@@ -7,7 +7,7 @@ const ARENA_QUEUE = 1700;
 const PAGE_SIZE = 100;
 const CHUNK_SIZE = 10;
 const IDS_PAGE_DELAY = 200;
-const CACHE_VERSION = "v17";
+const CACHE_VERSION = "v18";
 
 // ===== DOM =====
 const form = document.getElementById("search-form");
@@ -90,6 +90,17 @@ function createStatus(txt){ const el=document.createElement("div"); el.id="statu
 function status(t){ if(statusBox) statusBox.textContent = t||""; }
 function setLastUpdated(ts){ if(lastUpdatedEl) lastUpdatedEl.textContent = ts ? `Last updated, ${new Date(ts).toLocaleString()}` : ""; }
 function setMainVisible(v){ if (mainLayout) mainLayout.hidden = !v; }
+
+// Link to profile from a Riot ID
+function profileHref(nameTag){
+  // needs something like "Name#TAG"
+  if (!nameTag || !nameTag.includes("#")) return null;
+  const base = new URL(location.href.replace(/[^/]*$/, ""));
+  const url = new URL("app.html", base);
+  url.searchParams.set("id", nameTag);
+  url.searchParams.set("region", safeRegionUI());
+  return url.toString();
+}
 
 async function fetchJSON(url, tries=3, delay=600){
   const r = await fetch(url);
@@ -227,7 +238,7 @@ if (matchesBox) {
   });
 }
 
-// ===== Expor fallback global p/ HTML inline =====
+// ===== Fallback global p/ inline =====
 window.startSearch = function startSearch(e){
   try { if (e && e.preventDefault) { e.preventDefault(); e.stopPropagation?.(); e.stopImmediatePropagation?.(); } } catch {}
   onSearch(e);
@@ -248,11 +259,9 @@ async function onSearch(e){
     status("Looking up account…");
     showIndeterminate("Looking up account…"); setMainVisible(false);
 
-    // 1) Resolve conta (barato)
     const acc = await fetchJSON(api(`/account?gameName=${encodeURIComponent(parsed.gameName)}&tagLine=${encodeURIComponent(parsed.tagLine)}`));
     const regionRouting = mapRegionUItoRouting(safeRegionUI());
 
-    // 2) Tentar cache local (cache-first; sem fetch de jogos)
     const cached = loadCache(acc.puuid);
     if (cached?.matches?.length){
       Object.assign(CURRENT, {
@@ -268,10 +277,9 @@ async function onSearch(e){
       status("Loaded from device cache. Click Update to refresh.");
       pushRecent(`${acc.gameName}#${acc.tagLine}`, safeRegionUI());
       renderQuicklists(); updatePinButton();
-      return; // ← NÃO faz refresh automaticamente
+      return;
     }
 
-    // 3) Sem cache → fetch normal
     Object.assign(CURRENT, {
       gameName: acc.gameName, tagLine: acc.tagLine, puuid: acc.puuid,
       matches: [], ids: [], lastUpdated: null, region: regionRouting,
@@ -443,14 +451,16 @@ function renderSynergy(){
     : `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
 }
 
+// Best Duo Partners — now clickable
 function renderDuos(){
   if (!duoTableBody) return;
+
   const agg = new Map();
   const nameMap = new Map();
 
   for (const m of CURRENT.matches){
     const pid = m.allyPuuid || null;
-    const display = m.allyName || "Unknown";
+    const display = m.allyName || "Unknown"; // e.g., "Name#TAG" when available
     if (pid) nameMap.set(pid, display);
 
     const key = pid || `name:${display}`;
@@ -460,16 +470,17 @@ function renderDuos(){
   }
 
   const rows = [...agg.values()].map(s => {
-    const name = s.puuid ? (nameMap.get(s.puuid) || s.display || "Unknown") : s.display;
+    const displayName = s.puuid ? (nameMap.get(s.puuid) || s.display || "Unknown") : s.display;
     const wr = s.games ? Math.round((100*s.wins)/s.games) : 0;
     const avg = s.games ? (s.sumPlace/s.games).toFixed(2) : "—";
-    return { name, games: s.games, wins: s.wins, wr, avg };
+    const href = profileHref(displayName);
+    return { name: displayName, href, games: s.games, wins: s.wins, wr, avg };
   }).sort((a,b)=> b.games - a.games);
 
   duoTableBody.innerHTML = rows.length
     ? rows.map(x => `
         <tr>
-          <td>${x.name}</td>
+          <td>${x.href ? `<a class="link" href="${x.href}">${x.name}</a>` : x.name}</td>
           <td>${x.games}</td>
           <td>${x.wins}</td>
           <td>${x.wr}%</td>
