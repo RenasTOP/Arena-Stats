@@ -4,28 +4,29 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LeagueArena.gg — Profile</title>
-  <link rel="stylesheet" href="styles.css?v=build15" />
+  <link rel="stylesheet" href="styles.css?v=revamp10" />
 </head>
 <body>
   <header class="topbar">
     <div class="container">
       <a class="brand" href="./"><img src="logo.svg" alt="LeagueArena.gg"></a>
+
       <nav class="tabs" id="tabs">
         <button data-tab="matches" class="active">Overview & History</button>
         <button data-tab="synergy">Duo Synergies</button>
         <button data-tab="duos">Best Duo Partners</button>
       </nav>
-      <!-- Fallback: onsubmit e onclick chamam startSearch -->
-      <form id="search-form" class="search" onsubmit="return startSearch(event)">
-        <select id="region-select" title="Region">
+
+      <form id="search-form" class="search">
+        <select id="region-select" aria-label="Region">
           <option>NA</option>
           <option selected>EUW</option>
           <option>EUNE</option>
         </select>
-        <input id="riotid" placeholder="Riot ID (Name#TAG ou Name TAG)" />
-        <button type="submit" id="btn-search" onclick="return startSearch(event)">Search</button>
+        <input id="riotid" placeholder="Riot ID (Name#TAG)" aria-label="Riot ID" />
+        <button id="btn-search" type="submit">Search</button>
         <button type="button" id="btn-update" class="ghost">Update</button>
-        <button type="button" id="btn-pin" class="ghost" title="Pin/Unpin this profile">☆ Pin</button>
+        <button type="button" id="btn-pin">☆ Pin</button>
       </form>
     </div>
   </header>
@@ -35,21 +36,14 @@
     <div class="progress-text" id="progress-text">Preparing…</div>
   </div>
 
-  <!-- Só mostra quando acabar o fetch -->
-  <main class="container layout" id="main-layout" hidden>
+  <main class="container layout" id="main-layout">
     <aside class="sidebar">
       <section class="card">
-        <h3>Recentes & Fixos</h3>
-        <div class="quicklists">
-          <div>
-            <div class="muted small">Fixos</div>
-            <div id="pins-list" class="links-list"></div>
-          </div>
-          <div>
-            <div class="muted small">Recentes</div>
-            <div id="recents-list" class="links-list"></div>
-          </div>
-        </div>
+        <h3>Pinned & Recent</h3>
+        <div class="section-title" style="margin-bottom:6px"><small class="muted">Pinned</small></div>
+        <div id="pins-list" class="links-list"></div>
+        <div class="section-title" style="margin-top:10px;margin-bottom:6px"><small class="muted">Recent</small></div>
+        <div id="recents-list" class="links-list"></div>
       </section>
 
       <section class="card">
@@ -82,9 +76,9 @@
           <button data-filter="wins">1st place</button>
           <button data-filter="neverwon">Never won</button>
           <div class="champ-filter">
-            <input id="champ-input" list="champ-datalist" placeholder="Filter by champion…" />
+            <input id="champ-input" list="champ-datalist" placeholder="Filter by champion…" aria-label="Filter by champion" />
             <datalist id="champ-datalist"></datalist>
-            <button id="champ-clear" class="ghost sm">Clear</button>
+            <button id="champ-clear" class="ghost sm" type="button">Clear</button>
           </div>
         </div>
 
@@ -133,7 +127,6 @@
     <div class="container muted">Powered by Riot Games API • Icons by Data Dragon</div>
   </footer>
 
-  <!-- sem module; com defer para garantir DOM pronto -->
-  <script src="app.js?v=build15" defer></script>
+  <script type="module" src="app.js?v=revamp10"></script>
 </body>
 </html>
