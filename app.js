@@ -1,5 +1,5 @@
-// Arena.gg — cache-first + incremental update + polish (revamp10)
-console.log("app.js boot OK (revamp10)");
+// Arena.gg — cache-first + incremental update + splash bg (revamp11)
+console.log("app.js boot OK (revamp11)");
 
 // ===== Config =====
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
@@ -83,6 +83,8 @@ function parseRiotId(raw){
 function safeRegionUI(){ const v = regionSelect?.value || "EUW"; return String(v).toUpperCase(); }
 function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
 function champIcon(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`; }
+// Loading art (smaller than full splash) – we don't know skin from match-v5, so use index 0
+function loadingArt(name, skinIndex=0){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/img/champion/loading/${encodeURIComponent(fixed)}_${skinIndex}.jpg`; }
 function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "?"; return `${n}th`; }
 function timeAgo(ts){ if(!ts) return "unknown"; const s=Math.max(1,Math.floor((Date.now()-Number(ts))/1000)); const m=Math.floor(s/60); if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<48) return `${h}h ago`; const d=Math.floor(h/24); return `${d}d ago`; }
 function createStatus(txt){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; el.textContent = txt||""; document.body.prepend(el); return el; }
@@ -437,17 +439,18 @@ function renderHistory(){
 
   matchesBox.innerHTML = list.map(m=>{
     const p=Number(m.placement); const cls=p===1?"p1":p===2?"p2":p===3?"p3":"px";
-    const ally = m.allyChampionName ? ` with ${m.allyChampionName}` : "";
+    // remove ally text; keep only chip icon
     const allyChip = m.allyChampionName
       ? `<span class="ally-chip" title="Duo: ${m.allyChampionName}"><img src="${champIcon(m.allyChampionName)}" alt="${m.allyChampionName}"></span>`
       : "";
-    return `<article class="item" data-id="${m.matchId}">
+    const bg = loadingArt(m.championName, 0); // unknown skin → base (index 0)
+    return `<article class="item" data-id="${m.matchId}" style="--splash:url('${bg}')">
       <div class="icon icon-lg">
         <img src="${champIcon(m.championName)}" alt="${m.championName}">${allyChip}
       </div>
       <div>
         <div class="head">
-          <strong>${m.championName}${ally}</strong>
+          <strong>${m.championName}</strong>
           <span class="badge ${cls}">${ordinal(p)}</span>
         </div>
         <div class="small">KDA ${m.kills}/${m.deaths}/${m.assists} • ${timeAgo(m.gameStart)}</div>
