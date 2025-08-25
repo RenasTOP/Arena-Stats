@@ -1,5 +1,5 @@
-// Arena.gg — cache-first + tabs + duo links + UPDATE INCREMENTAL
-console.log("app.js boot OK (v19 incremental)");
+// Arena.gg — cache-first + incremental update + polish (revamp10)
+console.log("app.js boot OK (revamp10)");
 
 // ===== Config =====
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
@@ -7,8 +7,7 @@ const ARENA_QUEUE = 1700;
 const PAGE_SIZE = 100;
 const CHUNK_SIZE = 10;
 const IDS_PAGE_DELAY = 200;
-// ⚠️ Mantemos a mesma cache version p/ não apagares o cache antigo
-const CACHE_VERSION = "v18";
+const CACHE_VERSION = "v18"; // keep cache
 
 // ===== DOM =====
 const form = document.getElementById("search-form");
@@ -18,12 +17,12 @@ const regionSelect = document.getElementById("region-select");
 const btnUpdate = document.getElementById("btn-update");
 const btnPin = document.getElementById("btn-pin");
 
-// TABS
+// Tabs
 const tabsNav = document.getElementById("tabs");
 const tabViews = {
   matches: document.getElementById("tab-matches"),
   synergy: document.getElementById("tab-synergy"),
-  duos: document.getElementById("tab-duos"),
+  duos:    document.getElementById("tab-duos"),
 };
 
 const kpisBox = document.getElementById("kpis");
@@ -51,7 +50,6 @@ const recentsList = document.getElementById("recents-list");
 const progressWrap = document.getElementById("progress-wrap");
 const progressBar  = document.getElementById("progress-bar");
 const progressText = document.getElementById("progress-text");
-// status discreto (não mostramos aquele nudge de cache)
 const statusBox = createStatus("");
 
 // ===== State =====
@@ -103,12 +101,12 @@ async function initDDragon(){
   try { const r = await fetch("https://ddragon.leagueoflegends.com/api/versions.json"); if (r.ok){ const arr = await r.json(); if (arr?.[0]) DD_VERSION = arr[0]; } } catch {}
 }
 
-// ===== Progress UI =====
+// Progress UI
 function showIndeterminate(msg){ if(!progressWrap||!progressBar||!progressText) return; progressWrap.hidden=false; progressBar.classList.add('indeterminate'); progressBar.style.width='100%'; progressText.textContent=msg||'Working…'; }
 function showDeterminate(msg,pct){ if(!progressWrap||!progressBar||!progressText) return; progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
 function hideProgress(){ if(!progressWrap||!progressBar||!progressText) return; progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
 
-// ===== Pins/Recents =====
+// Pins/Recents
 const PIN_KEY = "arena_pins_v1";
 const RECENT_KEY = "arena_recents_v1";
 function loadPins(){ try{ return JSON.parse(localStorage.getItem(PIN_KEY)||"[]"); }catch{ return []; } }
@@ -148,7 +146,7 @@ function renderQuicklists(){
       const url = new URL("./app.html", location.href);
       url.searchParams.set("id", x.id); url.searchParams.set("region", x.regionUI);
       return `<a href="${url.toString()}" class="link-chip" title="${x.id} (${x.regionUI})">${x.id}</a>`;
-    }).join("") : `<div class="muted small">Sem fixos</div>`;
+    }).join("") : `<div class="muted small">No pinned profiles</div>`;
   }
   if (recentsList) {
     const recs = loadRecents();
@@ -156,16 +154,16 @@ function renderQuicklists(){
       const url = new URL("./app.html", location.href);
       url.searchParams.set("id", x.id); url.searchParams.set("region", x.regionUI);
       return `<a href="${url.toString()}" class="link-chip" title="${x.id} (${x.regionUI})">${x.id}</a>`;
-    }).join("") : `<div class="muted small">Sem recentes</div>`;
+    }).join("") : `<div class="muted small">No recent profiles</div>`;
   }
 }
 
-// ===== Cache =====
+// Cache
 function loadCache(puuid){ try { return JSON.parse(localStorage.getItem(cacheKey(puuid))||"null"); } catch { return null; } }
 function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
 
-// ===== Prefill =====
-function prefillFromURL(){
+// Prefill
+(function prefillFromURL(){
   const u = new URL(location.href);
   const id = u.searchParams.get('id');
   const region = u.searchParams.get('region');
@@ -175,10 +173,9 @@ function prefillFromURL(){
     setTimeout(()=> startSearch(new Event('submit')), 0);
   }
   renderQuicklists();
-}
-prefillFromURL();
+})();
 
-// ===== Tabs =====
+// Tabs
 if (tabsNav) {
   tabsNav.addEventListener("click", (e)=>{
     const btn = e.target.closest("button"); if (!btn) return;
@@ -195,10 +192,10 @@ if (tabsNav) {
   });
 }
 
-// ===== Listeners =====
+// Listeners
 if (form) form.addEventListener("submit", onSearch, { capture: true });
 if (btnSearch) btnSearch.addEventListener("click", (e)=>{ e.preventDefault(); onSearch(e); });
-// Update: SHIFT+click = full refresh; click normal = incremental
+// Update: Shift+click = full refresh; normal click = incremental
 if (btnUpdate) btnUpdate.addEventListener("click", (e) => refresh({ full: e.shiftKey }));
 if (btnPin) btnPin.addEventListener("click", onTogglePin);
 
@@ -228,25 +225,25 @@ if (matchesBox) {
   });
 }
 
-// ===== Fallback global p/ inline =====
+// Expose for inline
 window.startSearch = function startSearch(e){
   try { if (e && e.preventDefault) { e.preventDefault(); e.stopPropagation?.(); e.stopImmediatePropagation?.(); } } catch {}
   onSearch(e);
   return false;
 };
 
-// ===== Search / Refresh =====
+// Search
 async function onSearch(e){
   if (e){ e.preventDefault?.(); e.stopPropagation?.(); e.stopImmediatePropagation?.(); }
 
   const raw = riotIdInput?.value ?? "";
   const parsed = parseRiotId(raw);
-  if (!parsed){ alert('Usa "Name#TAG" ou "Name TAG"'); return; }
+  if (!parsed){ alert('Use "Name#TAG" or "Name TAG"'); return; }
 
   await initDDragon();
 
   try{
-    status(""); showIndeterminate("Looking up account…");
+    showIndeterminate("Looking up account…");
 
     const acc = await fetchJSON(api(`/account?gameName=${encodeURIComponent(parsed.gameName)}&tagLine=${encodeURIComponent(parsed.tagLine)}`));
     const regionRouting = mapRegionUItoRouting(safeRegionUI());
@@ -258,36 +255,29 @@ async function onSearch(e){
         matches: cached.matches, ids: cached.ids||[], region: cached.region || regionRouting,
         lastUpdated: cached.updatedAt || null,
       });
-
-      populateChampionDatalist();
-      renderAll();
-      setLastUpdated(cached.updatedAt);
-      hideProgress();
-      pushRecent(`${acc.gameName}#${acc.tagLine}`, safeRegionUI());
-      renderQuicklists(); updatePinButton();
-      return; // cache-first, sem “nudge”
+      populateChampionDatalist(); renderAll(); setLastUpdated(cached.updatedAt);
+      hideProgress(); pushRecent(`${acc.gameName}#${acc.tagLine}`, safeRegionUI()); renderQuicklists(); updatePinButton();
+      return;
     }
 
     Object.assign(CURRENT, {
       gameName: acc.gameName, tagLine: acc.tagLine, puuid: acc.puuid,
       matches: [], ids: [], lastUpdated: null, region: regionRouting,
     });
-    pushRecent(`${acc.gameName}#${acc.tagLine}`, safeRegionUI());
-    renderQuicklists(); updatePinButton();
+    pushRecent(`${acc.gameName}#${acc.tagLine}`, safeRegionUI()); renderQuicklists(); updatePinButton();
 
-    // primeira vez → full
-    await refresh({ full: true });
+    await refresh({ full: true }); // first time
   } catch(err){
     console.error(err);
-    alert(`Erro ao procurar conta: ${err.message||err}`);
+    alert(`Search failed: ${err.message||err}`);
     hideProgress();
   }
 }
 
 /**
  * Refresh:
- *  - full: true  → busca TODOS os IDs (para primeira carga ou se quiseres forçar: Shift+Update)
- *  - full: false → incremental: para na primeira página que contenha um ID conhecido e pede só os novos
+ *  - full: true  → full history (first load or Shift+Update)
+ *  - full: false → incremental: stop when we hit a known ID and fetch only the new ones
  */
 async function refresh({ full=false } = {}){
   if (!CURRENT.puuid) return;
@@ -303,9 +293,8 @@ async function refresh({ full=false } = {}){
     let allIds = [];
     let newIds = [];
 
-    // ---- 1) Buscar IDs
+    // 1) fetch IDs
     if (full || knownIdSet.size === 0){
-      // Full: todas as páginas
       let start = 0;
       for (;;) {
         progressText && (progressText.textContent = `Fetching match IDs… ${start}–${start + PAGE_SIZE - 1}`);
@@ -317,35 +306,29 @@ async function refresh({ full=false } = {}){
         await new Promise(r=>setTimeout(r, IDS_PAGE_DELAY));
       }
     } else {
-      // Incremental: ler páginas até apanhar 1 ID conhecido
-      let start = 0;
-      let stop = false;
+      // incremental
+      let start = 0; let stop = false;
       while(!stop){
         const ids = await fetchJSON(api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`));
         if (!ids.length){ break; }
-        // guarda apenas IDs até ao primeiro conhecido
         for (const id of ids){
           if (knownIdSet.has(id)){ stop = true; break; }
           newIds.push(id);
         }
-        // se a página veio curta, acabou
         if (ids.length < PAGE_SIZE) break;
         if (!stop) start += ids.length;
         await new Promise(r=>setTimeout(r, IDS_PAGE_DELAY));
       }
-      // ids finais = novos + antigos já guardados
       allIds = newIds.concat(CURRENT.ids || []);
     }
 
-    // ---- 2) Buscar detalhes SÓ dos novos
+    // 2) details only for new
     const knownMatchSet = new Set(CURRENT.matches.map(m=>m.matchId));
     const toFetch = (full ? allIds : newIds).filter(id => !knownMatchSet.has(id));
 
     if (toFetch.length === 0){
-      // nada novo
       hideProgress();
       setLastUpdated(Date.now());
-      // atualiza apenas cache dos IDs (útil se antes não tinhas guardado)
       CURRENT.ids = allIds.slice();
       saveCache(CURRENT.puuid, { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() });
       return;
@@ -365,18 +348,15 @@ async function refresh({ full=false } = {}){
       showDeterminate(`Fetching match details… ${Math.min(fetched,total)} / ${total}`, pct);
     }
 
-    // ---- 3) Merge
     if (full){
       CURRENT.matches = dedupeById(collected).sort((a,b)=>b.gameStart-a.gameStart);
       CURRENT.ids = allIds.slice();
     } else {
-      // novos no topo + os antigos
       const merged = dedupeById(collected.concat(CURRENT.matches)).sort((a,b)=>b.gameStart-a.gameStart);
       CURRENT.matches = merged;
       CURRENT.ids = allIds.slice();
     }
 
-    // ---- 4) Cache + render
     const payload = { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() };
     saveCache(CURRENT.puuid, payload);
     setLastUpdated(payload.updatedAt);
@@ -385,7 +365,7 @@ async function refresh({ full=false } = {}){
     hideProgress();
   } catch(err){
     console.error(err);
-    alert(`Erro a atualizar: ${err.message||err}`);
+    alert(`Update failed: ${err.message||err}`);
     hideProgress();
   }
 }
@@ -457,13 +437,20 @@ function renderHistory(){
 
   matchesBox.innerHTML = list.map(m=>{
     const p=Number(m.placement); const cls=p===1?"p1":p===2?"p2":p===3?"p3":"px";
-    const ally = m.allyChampionName ? ` · with ${m.allyChampionName}` : "";
+    const ally = m.allyChampionName ? ` with ${m.allyChampionName}` : "";
+    const allyChip = m.allyChampionName
+      ? `<span class="ally-chip" title="Duo: ${m.allyChampionName}"><img src="${champIcon(m.allyChampionName)}" alt="${m.allyChampionName}"></span>`
+      : "";
     return `<article class="item" data-id="${m.matchId}">
-      <div class="icon"><img src="${champIcon(m.championName)}" alt="${m.championName}"></div>
+      <div class="icon icon-lg">
+        <img src="${champIcon(m.championName)}" alt="${m.championName}">${allyChip}
+      </div>
       <div>
-        <div class="head"><strong>${m.championName}${ally}</strong><span class="badge ${cls}">${ordinal(p)}</span></div>
-        <div class="small">KDA, ${m.kills}/${m.deaths}/${m.assists}</div>
-        <div class="small">Played, ${timeAgo(m.gameStart)}</div>
+        <div class="head">
+          <strong>${m.championName}${ally}</strong>
+          <span class="badge ${cls}">${ordinal(p)}</span>
+        </div>
+        <div class="small">KDA ${m.kills}/${m.deaths}/${m.assists} • ${timeAgo(m.gameStart)}</div>
       </div>
     </article>`;
   }).join("");
@@ -502,7 +489,7 @@ function renderSynergy(){
     : `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
 }
 
-// Best Duo Partners — nomes clicáveis para perfis
+// Best Duo Partners — clickable names
 function renderDuos(){
   if (!duoTableBody) return;
 
@@ -511,7 +498,7 @@ function renderDuos(){
 
   for (const m of CURRENT.matches){
     const pid = m.allyPuuid || null;
-    const display = m.allyName || "Unknown"; // e.g., "Name#TAG" quando disponível
+    const display = m.allyName || "Unknown";
     if (pid) nameMap.set(pid, display);
 
     const key = pid || `name:${display}`;
@@ -540,7 +527,7 @@ function renderDuos(){
     : `<tr><td colspan="5" class="muted">No duo partners found.</td></tr>`;
 }
 
-// ===== Helpers =====
+// Helpers
 function profileHref(nameTag){
   const base = new URL(location.href.replace(/[^/]*$/, ""));
   const url = new URL("app.html", base);
