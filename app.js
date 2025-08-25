@@ -1,5 +1,5 @@
-// Arena.gg — boot visível + fallback inline + main só quando terminar fetch
-console.log("app.js boot OK (v16)");
+// Arena.gg — cache-first search, só faz fetch no "Update" ou se não houver cache
+console.log("app.js boot OK (v17 cache-first)");
 
 // ===== Config =====
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
@@ -7,7 +7,7 @@ const ARENA_QUEUE = 1700;
 const PAGE_SIZE = 100;
 const CHUNK_SIZE = 10;
 const IDS_PAGE_DELAY = 200;
-const CACHE_VERSION = "v16";
+const CACHE_VERSION = "v17";
 
 // ===== DOM =====
 const form = document.getElementById("search-form");
@@ -17,7 +17,7 @@ const regionSelect = document.getElementById("region-select");
 const btnUpdate = document.getElementById("btn-update");
 const btnPin = document.getElementById("btn-pin");
 
-// TABS (restaurado)
+// TABS
 const tabsNav = document.getElementById("tabs");
 const tabViews = {
   matches: document.getElementById("tab-matches"),
@@ -172,25 +172,22 @@ function prefillFromURL(){
   if (region && regionSelect) regionSelect.value = region.toUpperCase();
   if (id && riotIdInput && id.includes('#')) {
     riotIdInput.value = id;
-    // arranca logo a pesquisa
     setTimeout(()=> startSearch(new Event('submit')), 0);
   }
   renderQuicklists();
 }
 prefillFromURL();
 
-// ===== Tabs init (RESTAURO) =====
+// ===== Tabs =====
 if (tabsNav) {
   tabsNav.addEventListener("click", (e)=>{
     const btn = e.target.closest("button"); if (!btn) return;
     const key = btn.dataset.tab;
-    // toggle estado visual nos botões
     [...tabsNav.querySelectorAll("button")].forEach(b=>{
       const active = b === btn;
       b.classList.toggle("active", active);
       b.setAttribute("aria-selected", active ? "true" : "false");
     });
-    // troca de vistas
     Object.entries(tabViews).forEach(([k, el])=>{
       if (!el) return;
       el.classList.toggle("active", k === key);
@@ -198,7 +195,7 @@ if (tabsNav) {
   });
 }
 
-// ===== Listeners (também temos fallbacks inline no HTML) =====
+// ===== Listeners =====
 if (form) form.addEventListener("submit", onSearch, { capture: true });
 if (btnSearch) btnSearch.addEventListener("click", (e)=>{ e.preventDefault(); onSearch(e); });
 if (btnUpdate) btnUpdate.addEventListener("click", () => refresh(true));
@@ -216,6 +213,20 @@ if (filtersEl) {
 if (champInput) champInput.addEventListener("input", ()=>{ CURRENT.champQuery = (champInput.value || "").trim(); renderHistory(); });
 if (champClear) champClear.addEventListener("click", ()=>{ if (champInput) champInput.value=""; CURRENT.champQuery=""; renderHistory(); });
 
+// History → match.html
+if (matchesBox) {
+  matchesBox.addEventListener("click", (e)=>{
+    const card = e.target.closest(".item"); if (!card) return;
+    const id = card.dataset.id;
+    const base = new URL(location.href.replace(/[^/]*$/, ""));
+    const url = new URL("match.html", base);
+    url.searchParams.set("id", id);
+    url.searchParams.set("puuid", CURRENT.puuid || "");
+    url.searchParams.set("region", CURRENT.region || "");
+    location.href = url.toString();
+  });
+}
+
 // ===== Expor fallback global p/ HTML inline =====
 window.startSearch = function startSearch(e){
   try { if (e && e.preventDefault) { e.preventDefault(); e.stopPropagation?.(); e.stopImmediatePropagation?.(); } } catch {}
@@ -226,19 +237,45 @@ window.startSearch = function startSearch(e){
 // ===== Search / Refresh =====
 async function onSearch(e){
   if (e){ e.preventDefault?.(); e.stopPropagation?.(); e.stopImmediatePropagation?.(); }
+
   const raw = riotIdInput?.value ?? "";
   const parsed = parseRiotId(raw);
   if (!parsed){ alert('Usa "Name#TAG" ou "Name TAG"'); return; }
 
   await initDDragon();
+
   try{
-    status("Looking up account…"); setMainVisible(false); showIndeterminate("Looking up account…");
+    status("Looking up account…");
+    showIndeterminate("Looking up account…"); setMainVisible(false);
 
+    // 1) Resolve conta (barato)
     const acc = await fetchJSON(api(`/account?gameName=${encodeURIComponent(parsed.gameName)}&tagLine=${encodeURIComponent(parsed.tagLine)}`));
-    CURRENT.gameName = acc.gameName; CURRENT.tagLine = acc.tagLine; CURRENT.puuid = acc.puuid;
-    CURRENT.matches = []; CURRENT.ids = []; CURRENT.lastUpdated = null;
-    CURRENT.region = mapRegionUItoRouting(safeRegionUI());
+    const regionRouting = mapRegionUItoRouting(safeRegionUI());
 
+    // 2) Tentar cache local (cache-first; sem fetch de jogos)
+    const cached = loadCache(acc.puuid);
+    if (cached?.matches?.length){
+      Object.assign(CURRENT, {
+        gameName: acc.gameName, tagLine: acc.tagLine, puuid: acc.puuid,
+        matches: cached.matches, ids: cached.ids||[], region: cached.region || regionRouting,
+        lastUpdated: cached.updatedAt || null,
+      });
+
+      populateChampionDatalist();
+      renderAll();
+      setLastUpdated(cached.updatedAt);
+      hideProgress(); setMainVisible(true);
+      status("Loaded from device cache. Click Update to refresh.");
+      pushRecent(`${acc.gameName}#${acc.tagLine}`, safeRegionUI());
+      renderQuicklists(); updatePinButton();
+      return; // ← NÃO faz refresh automaticamente
+    }
+
+    // 3) Sem cache → fetch normal
+    Object.assign(CURRENT, {
+      gameName: acc.gameName, tagLine: acc.tagLine, puuid: acc.puuid,
+      matches: [], ids: [], lastUpdated: null, region: regionRouting,
+    });
     pushRecent(`${acc.gameName}#${acc.tagLine}`, safeRegionUI());
     renderQuicklists(); updatePinButton();
 
