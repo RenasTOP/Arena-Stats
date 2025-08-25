@@ -6,8 +6,8 @@
   --shadow: 0 6px 18px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.02) inset;
 
   /* ===== Splash tuning (mais visível) ===== */
-  --splash-opacity: .55;          /* força da imagem nas match cards */
-  --splash-opacity-hover: .70;    /* ainda mais visível no hover */
+  --splash-opacity: .70;          /* força da imagem nas match cards */
+  --splash-opacity-hover: .100;    /* ainda mais visível no hover */
   --splash-dark-a: .48;           /* opacidade do gradiente escuro (esquerda) */
   --splash-dark-b: .22;           /* opacidade do gradiente escuro (direita) */
   --splash-dark-a-hover: .34;     /* hover: gradiente mais leve */
