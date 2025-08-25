@@ -5,10 +5,13 @@
   --green:#238636; --chip:#1b2330;
   --shadow: 0 6px 18px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.02) inset;
 
-  /* tweakables */
-  --splash-opacity: .06;    /* <= força da imagem de fundo nas match cards */
-  --splash-dark-a: .86;     /* <= opacidade lado esquerdo do gradiente escuro */
-  --splash-dark-b: .58;     /* <= opacidade lado direito do gradiente escuro */
+  /* ===== Splash tuning (mais visível) ===== */
+  --splash-opacity: .18;          /* força da imagem nas match cards */
+  --splash-opacity-hover: .26;    /* ainda mais visível no hover */
+  --splash-dark-a: .48;           /* opacidade do gradiente escuro (esquerda) */
+  --splash-dark-b: .22;           /* opacidade do gradiente escuro (direita) */
+  --splash-dark-a-hover: .34;     /* hover: gradiente mais leve */
+  --splash-dark-b-hover: .12;
 }
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
@@ -84,24 +87,35 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-appl
   display:grid;grid-template-columns:52px 1fr;gap:12px;cursor:pointer;transition:transform .08s ease, background .12s ease, box-shadow .12s ease;
   box-shadow:var(--shadow); overflow:hidden;
 }
-/* splash background — now subtler & darker */
+/* splash background — MAIS VISÍVEL */
 .item::before{
   content:""; position:absolute; inset:0; pointer-events:none;
   background-image:var(--splash); background-size:cover; background-position:center;
-  opacity:var(--splash-opacity); filter:saturate(.85) contrast(1.02) brightness(.92);
+  opacity:var(--splash-opacity); filter:saturate(.95) contrast(1.06) brightness(1.0);
   transform:scale(1.02);
 }
-/* darken for readability (stronger than antes) */
+/* darken leve para legibilidade */
 .item::after{
   content:""; position:absolute; inset:0; pointer-events:none;
   background:linear-gradient(
     90deg,
     rgba(15,20,27,var(--splash-dark-a)) 0%,
-    rgba(15,20,27,calc(var(--splash-dark-a) - .1)) 40%,
+    rgba(15,20,27,calc(var(--splash-dark-a) - .12)) 42%,
     rgba(15,20,27,var(--splash-dark-b)) 100%
   );
 }
 .item > *{ position:relative } /* keep content above bg layers */
+
+/* hover: mais destaque à arte */
+.item:hover::before{ opacity: var(--splash-opacity-hover); }
+.item:hover::after{
+  background:linear-gradient(
+    90deg,
+    rgba(15,20,27,var(--splash-dark-a-hover)) 0%,
+    rgba(15,20,27,calc(var(--splash-dark-a-hover) - .12)) 42%,
+    rgba(15,20,27,var(--splash-dark-b-hover)) 100%
+  );
+}
 
 .item:hover{transform:translateY(-1px);background:#121823}
 .icon{position:relative;width:52px;height:52px;border-radius:12px;overflow:hidden;border:1px solid var(--border)}
@@ -114,6 +128,10 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-appl
 .ally-chip img{width:20px;height:20px;border-radius:50%;border:1px solid var(--border)}
 .head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .small{color:var(--muted);font-size:.92rem}
+
+/* leve sombra no texto para legibilidade sobre imagens claras */
+.head strong, .small, .badge{ text-shadow:0 1px 0 rgba(0,0,0,.35); }
+
 .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--border);font-size:.85rem}
 .badge.p1{background:#1f3c1f;color:#a9e6b0}
 .badge.p2{background:#1c2a4a;color:#a9c8ff}
