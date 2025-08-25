@@ -12,6 +12,11 @@
   --splash-dark-b: .22;           /* opacidade do gradiente escuro (direita) */
   --splash-dark-a-hover: .34;     /* hover: gradiente mais leve */
   --splash-dark-b-hover: .12;
+
+  /* ===== Legibilidade do texto nas match cards ===== */
+  --text-scrim-bg: rgba(10,14,18,.44);
+  --text-scrim-bg-hover: rgba(10,14,18,.32);
+  --text-shadow-strong: 0 1px 1px rgba(0,0,0,.65), 0 0 4px rgba(0,0,0,.55);
 }
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
@@ -126,11 +131,22 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-appl
   background:#0f141b;border:1px solid var(--border);display:grid;place-items:center;
 }
 .ally-chip img{width:20px;height:20px;border-radius:50%;border:1px solid var(--border)}
-.head{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.small{color:var(--muted);font-size:.92rem}
 
-/* leve sombra no texto para legibilidade sobre imagens claras */
-.head strong, .small, .badge{ text-shadow:0 1px 0 rgba(0,0,0,.35); }
+/* Cabeçalho e linha de KDA com SCRIM para legibilidade */
+.head{display:flex;align-items:center;justify-content:space-between;gap:8px; margin-bottom:4px;
+  background:var(--text-scrim-bg); padding:4px 6px; border-radius:8px;
+  -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px);
+  box-shadow:0 1px 0 rgba(0,0,0,.25) inset, 0 1px 8px rgba(0,0,0,.15);
+}
+.small{color:var(--muted);font-size:.92rem;
+  background:var(--text-scrim-bg); padding:4px 6px; border-radius:8px; display:inline-block;
+  -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px);
+  box-shadow:0 1px 0 rgba(0,0,0,.25) inset, 0 1px 8px rgba(0,0,0,.15);
+}
+.item:hover .head, .item:hover .small{ background:var(--text-scrim-bg-hover); }
+
+/* sombra de texto reforçada */
+.head strong, .small, .badge{ text-shadow: var(--text-shadow-strong); }
 
 .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--border);font-size:.85rem}
 .badge.p1{background:#1f3c1f;color:#a9e6b0}
