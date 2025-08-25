@@ -1,5 +1,5 @@
-// Arena.gg — cache-first + incremental update + splash bg (revamp11)
-console.log("app.js boot OK (revamp11)");
+// Arena.gg — cache-first + incremental update + splash bg + resilient fetch (revamp12)
+console.log("app.js boot OK (revamp12)");
 
 // ===== Config =====
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
@@ -83,7 +83,7 @@ function parseRiotId(raw){
 function safeRegionUI(){ const v = regionSelect?.value || "EUW"; return String(v).toUpperCase(); }
 function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
 function champIcon(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`; }
-// Loading art (smaller than full splash) – we don't know skin from match-v5, so use index 0
+// Loading art – skin index unknown -> 0
 function loadingArt(name, skinIndex=0){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/img/champion/loading/${encodeURIComponent(fixed)}_${skinIndex}.jpg`; }
 function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "?"; return `${n}th`; }
 function timeAgo(ts){ if(!ts) return "unknown"; const s=Math.max(1,Math.floor((Date.now()-Number(ts))/1000)); const m=Math.floor(s/60); if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<48) return `${h}h ago`; const d=Math.floor(h/24); return `${d}d ago`; }
@@ -91,14 +91,26 @@ function createStatus(txt){ const el=document.createElement("div"); el.id="statu
 function status(t){ if(statusBox) statusBox.textContent = t||""; }
 function setLastUpdated(ts){ if(lastUpdatedEl) lastUpdatedEl.textContent = ts ? `Last updated, ${new Date(ts).toLocaleString()}` : ""; }
 
-async function fetchJSON(url, tries=3, delay=600){
+async function fetchJSON(url, tries=4, delay=700){
   const r = await fetch(url);
   if (r.ok) return r.json();
+
   const txt = await r.text().catch(()=> "");
-  const is429 = r.status===429 || /Riot 429/i.test(txt);
-  if (is429 && tries>0){ await new Promise(r=>setTimeout(r, delay)); return fetchJSON(url, tries-1, delay*2); }
-  throw new Error(`Request failed, ${r.status}${txt?`, ${txt}`:""}`);
+  const status = r.status;
+  const is429 = status===429 || /Riot 429/i.test(txt);
+  const is5xx = (status>=500 && status<600) || /Riot 5\d{2}/i.test(txt);
+
+  if ((is429 || is5xx) && tries>0){
+    // exponential backoff + jitter
+    const jitter = Math.random()*400;
+    await new Promise(res=>setTimeout(res, delay + jitter));
+    return fetchJSON(url, tries-1, Math.min(delay*1.8, 6000));
+  }
+
+  // bubble up with context (frontend will show friendly text)
+  throw new Error(`HTTP ${status}${txt?`: ${txt}`:""}`);
 }
+
 async function initDDragon(){
   try { const r = await fetch("https://ddragon.leagueoflegends.com/api/versions.json"); if (r.ok){ const arr = await r.json(); if (arr?.[0]) DD_VERSION = arr[0]; } } catch {}
 }
@@ -107,6 +119,15 @@ async function initDDragon(){
 function showIndeterminate(msg){ if(!progressWrap||!progressBar||!progressText) return; progressWrap.hidden=false; progressBar.classList.add('indeterminate'); progressBar.style.width='100%'; progressText.textContent=msg||'Working…'; }
 function showDeterminate(msg,pct){ if(!progressWrap||!progressBar||!progressText) return; progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
 function hideProgress(){ if(!progressWrap||!progressBar||!progressText) return; progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
+
+// Friendly error mapper
+function friendly(err){
+  const msg = String(err?.message||err||"");
+  if (/429/.test(msg)) return "Riot rate limit (429). Please wait a bit and try again.";
+  if (/503|Service Unavailable/i.test(msg)) return "Riot API is temporarily unavailable (503). Try again in a minute.";
+  if (/502|504|522|524/.test(msg)) return "Upstream temporarily unreachable. Retrying might help.";
+  return `Request failed: ${msg}`;
+}
 
 // Pins/Recents
 const PIN_KEY = "arena_pins_v1";
@@ -259,6 +280,7 @@ async function onSearch(e){
       });
       populateChampionDatalist(); renderAll(); setLastUpdated(cached.updatedAt);
       hideProgress(); pushRecent(`${acc.gameName}#${acc.tagLine}`, safeRegionUI()); renderQuicklists(); updatePinButton();
+      status(""); // clear status if any
       return;
     }
 
@@ -269,9 +291,10 @@ async function onSearch(e){
     pushRecent(`${acc.gameName}#${acc.tagLine}`, safeRegionUI()); renderQuicklists(); updatePinButton();
 
     await refresh({ full: true }); // first time
+    status("");
   } catch(err){
     console.error(err);
-    alert(`Search failed: ${err.message||err}`);
+    status(friendly(err));
     hideProgress();
   }
 }
@@ -333,6 +356,8 @@ async function refresh({ full=false } = {}){
       setLastUpdated(Date.now());
       CURRENT.ids = allIds.slice();
       saveCache(CURRENT.puuid, { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() });
+      status("Up to date.");
+      setTimeout(()=>status(""), 1500);
       return;
     }
 
@@ -365,9 +390,10 @@ async function refresh({ full=false } = {}){
 
     populateChampionDatalist(); renderAll();
     hideProgress();
+    status("");
   } catch(err){
     console.error(err);
-    alert(`Update failed: ${err.message||err}`);
+    status(friendly(err));
     hideProgress();
   }
 }
@@ -439,11 +465,10 @@ function renderHistory(){
 
   matchesBox.innerHTML = list.map(m=>{
     const p=Number(m.placement); const cls=p===1?"p1":p===2?"p2":p===3?"p3":"px";
-    // remove ally text; keep only chip icon
     const allyChip = m.allyChampionName
       ? `<span class="ally-chip" title="Duo: ${m.allyChampionName}"><img src="${champIcon(m.allyChampionName)}" alt="${m.allyChampionName}"></span>`
       : "";
-    const bg = loadingArt(m.championName, 0); // unknown skin → base (index 0)
+    const bg = loadingArt(m.championName, 0);
     return `<article class="item" data-id="${m.matchId}" style="--splash:url('${bg}')">
       <div class="icon icon-lg">
         <img src="${champIcon(m.championName)}" alt="${m.championName}">${allyChip}
