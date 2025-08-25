@@ -18,24 +18,43 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-appl
 
 /* Layout / Topbar */
 .container{max-width:1100px;margin:24px auto;padding:0 16px}
-.topbar{position:sticky;top:0;background:rgba(15,18,22,.78);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);z-index:10}
-.topbar .container{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.topbar{
+  position:sticky;top:0;background:rgba(15,18,22,.78);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border);z-index:10
+}
+.topbar .container{
+  display:flex;gap:12px;align-items:center;justify-content:space-between;
+  min-height:72px;               /* espaço para wordmark grande */
+  padding-top:6px;padding-bottom:6px;
+}
 
 /* BRAND — wordmark no desktop, ícone no mobile */
 .brand{display:flex;align-items:center;gap:10px;text-decoration:none}
 .brand img{display:block;object-fit:contain}
-.brand .logo-icon{height:24px;filter:drop-shadow(0 1px 6px rgba(255,138,61,.35))}
-.brand .logo-word{height:34px;display:none;filter:drop-shadow(0 2px 10px rgba(255,138,61,.28))}
+
+/* mobile/tablet: ícone AR */
+.brand .logo-icon{
+  height:28px;
+  filter:drop-shadow(0 1px 6px rgba(255,138,61,.35));
+}
+
+/* desktop: WORDMARK GRANDE */
+.brand .logo-word{display:none}
 @media (min-width: 980px){
   .brand .logo-icon{display:none}
-  .brand .logo-word{display:block}
+  .brand .logo-word{
+    display:block;
+    height:56px; /* ⇦ aumenta aqui se quiseres ainda maior (p.ex. 64px) */
+    filter:drop-shadow(0 3px 14px rgba(255,138,61,.35));
+  }
 }
 
 /* Tabs */
 .tabs{display:flex;gap:8px}
 .tabs button{
   background:#202736;border:1px solid var(--border);color:var(--text);
-  padding:8px 12px;border-radius:12px;cursor:pointer;transition:transform .06s ease, background .12s ease, box-shadow .12s ease, border-color .12s ease;
+  padding:8px 12px;border-radius:12px;cursor:pointer;
+  transition:transform .06s ease, background .12s ease, box-shadow .12s ease, border-color .12s ease;
 }
 .tabs button:hover{transform:translateY(-1px);border-color:#344055}
 .tabs button.active{
@@ -47,10 +66,17 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-appl
 
 /* Search */
 .search{display:flex;gap:8px}
-.search input,.home-search input{flex:1;padding:11px 14px;border-radius:10px;border:1px solid var(--border);background:#161b22;color:var(--text);outline:none}
+.search input,.home-search input{
+  flex:1;padding:11px 14px;border-radius:10px;border:1px solid var(--border);
+  background:#161b22;color:var(--text);outline:none;
+}
 .search input:focus{border-color:#3d4657; box-shadow:0 0 0 2px rgba(255,138,61,.18)}
 .search select,.home-search select{padding:11px 12px;border-radius:10px;border:1px solid var(--border);background:#161b22;color:var(--text)}
-.search button,.home-search button{padding:11px 16px;border-radius:10px;border:0;background:linear-gradient(180deg,var(--accent-2),var(--accent));color:#111;cursor:pointer;box-shadow:var(--accent-glow);font-weight:700}
+.search button,.home-search button{
+  padding:11px 16px;border-radius:10px;border:0;
+  background:linear-gradient(180deg,var(--accent-2),var(--accent));
+  color:#111;cursor:pointer;box-shadow:var(--accent-glow);font-weight:700;
+}
 .search button:hover,.home-search button:hover{filter:saturate(1.05)}
 .search button.ghost{background:transparent;border:1px solid var(--border);color:var(--text);box-shadow:none}
 .search button.ghost:hover{border-color:#3d4657}
