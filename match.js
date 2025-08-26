@@ -1,126 +1,28 @@
-// Match details — LoG-style cards + LIVE augment names/icons via CommunityDragon (no json to maintain)
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
-
-// --- Params ---
-const params = new URLSearchParams(location.search);
-const matchId = params.get("id");
-const focusPuuid = params.get("puuid");
-const routingRegion = params.get("region") || ""; // americas/europe
-let uiRegion = params.get("regionUI") || "";      // NA/EUW/EUNE for links
-
-// --- DOM ---
-const backLink = document.getElementById("back-link");
-const card = document.getElementById("match-card");
-const teamsWrap = document.getElementById("teams");
-const tbody = document.querySelector("#match-table tbody");
-
-// --- DDragon (items/champs) ---
-let DD_VERSION = "15.16.1";
-const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Khazix", VelKoz:"Velkoz", ChoGath:"Chogath", KaiSa:"Kaisa", LeBlanc:"Leblanc", DrMundo:"DrMundo", Nunu:"Nunu", Renata:"Renata", RekSai:"RekSai", KogMaw:"KogMaw", BelVeth:"Belveth", TahmKench:"TahmKench" };
-const ITEM_DB = { byId:{} };
-
-function champIcon(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`; }
-function itemIcon(id){ return !id||id===0 ? "" : `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/item/${id}.png`; }
-const stripTags = (h)=> String(h||"").replace(/<[^>]*>/g,"");
-function itemTip(id){
-  const rec = ITEM_DB.byId?.[String(id)];
-  if(!rec) return `Item ${id}`;
-  const cost = rec.gold?.total ? ` • ${rec.gold.total}g` : "";
-  const desc = rec.plaintext || stripTags(rec.description||"");
-  return `<strong>${rec.name}${cost}</strong>\n${desc}`;
-}
-function isArcaneSweeper(id){
-  const rec = ITEM_DB.byId?.[String(id)];
-  return rec ? /arcane\s*sweeper/i.test(rec.name||"") : false;
-}
-const esc = (s)=> String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
-
-async function initDDragon(){
-  try {
-    const r = await fetch("https://ddragon.leagueoflegends.com/api/versions.json");
-    if (r.ok){ const a = await r.json(); if (a?.[0]) DD_VERSION = a[0]; }
-  } catch {}
-  try {
-    const r = await fetch(`https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/data/en_US/item.json`);
-    if (r.ok){ const data = await r.json(); ITEM_DB.byId = data.data || {}; }
-  } catch {}
-}
-
-// --- CommunityDragon Augments ---
-const CDRAGON_BASE = "https://raw.communitydragon.org/latest";
-const AUG_DB = { byId: new Map(), byKey: new Map() };
-
-async function loadAugmentsFromCDragon(){
-  const candidates = [
-    `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/arena-augments.json`,
-    `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/augments.json`,
-    `${CDRAGON_BASE}/plugins/rcp-be-lol-game-data/global/default/v1/perks.json`
-  ];
-  for (const url of candidates){
-    try{
-      const r = await fetch(url, { cache: "no-store" });
-      if (!r.ok) continue;
-      const data = await r.json();
-      ingestAugments(data);
-    } catch {}
-  }
-}
-function ingestAugments(data){
-  const arr = Array.isArray(data) ? data : Object.values(data || {});
-  for (const a of arr){
-    const id   = a.id ?? a.augmentId ?? a.gameModifierId ?? null;
-    const key  = a.nameId ?? a.tftId ?? a.apiName ?? a.inventoryIcon ?? a.icon ?? a.contentId ?? null;
-    const name = a.name ?? a.localizedName ?? a.displayName ?? a.title ?? null;
-    const desc = a.desc ?? a.tooltip ?? a.description ?? a.longDesc ?? null;
-    const iconPath = a.iconPath ?? a.iconLargePath ?? a.icon ?? a.augmentIcon ?? null;
-    const icon = iconPath ? (CDRAGON_BASE + (iconPath.startsWith("/") ? iconPath : "/" + iconPath)).toLowerCase() : null;
-    const rec = { id, key, name, desc, icon };
-    if (id != null && !AUG_DB.byId.has(Number(id))) AUG_DB.byId.set(Number(id), rec);
-    if (key && !AUG_DB.byKey.has(String(key)))      AUG_DB.byKey.set(String(key), rec);
-  }
-}
-function prettifyAugString(raw){
-  const s = String(raw).replace(/^arena[_-]?/i,"").replace(/^mastery[_-]?/i,"").replace(/^augment[_-]?/i,"").replace(/[_-]+/g," ").trim();
-  return s.split(" ").map(w => w ? w[0].toUpperCase() + w.slice(1) : w).join(" ");
-}
-function lookupAug(raw){
-  if (raw == null) return null;
-  const asNum = Number(raw);
-  if (Number.isFinite(asNum) && AUG_DB.byId.size){
-    const rec = AUG_DB.byId.get(asNum);
-    if (rec) return rec;
-  }
-  if (AUG_DB.byKey.size){
-    const rec = AUG_DB.byKey.get(String(raw));
-    if (rec) return rec;
-  }
-  return { name: typeof raw === "string" ? prettifyAugString(raw) : `Augment #${raw}` };
-}
-
-// --- Utils ---
+// Match page (details + augments)
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
 function api(pathAndQuery){
   const base = API_BASE.replace(/\/+$/, "");
   const path = pathAndQuery.startsWith("/") ? pathAndQuery : `/${pathAndQuery}`;
   return `${base}${path}`;
 }
-async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }
+
+let DD_VERSION = "15.16.1";
+const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Khazix", VelKoz:"Velkoz", ChoGath:"Chogath", KaiSa:"Kaisa", LeBlanc:"Leblanc", DrMundo:"DrMundo", Nunu:"Nunu", Renata:"Renata", RekSai:"RekSai", KogMaw:"KogMaw", BelVeth:"Belveth", TahmKench:"TahmKench" };
+const ITEM_DB = { byId:{} };
+const AUG_DB = { byId:{} };
+
+function champIcon(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`; }
+function itemIcon(id){ return !id||id===0 ? "" : `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/item/${id}.png`; }
+function splashUrl(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${encodeURIComponent(fixed)}_0.jpg`; }
 function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "?"; return `${n}th`; }
-function timeStr(ts){ try { return new Date(ts).toLocaleString(); } catch { return "—"; } }
-function secondsToMin(s){ if (!Number.isFinite(s)) return "—"; const m=Math.floor(s/60), sec=Math.floor(s%60); return `${m}m ${sec}s`; }
-function routingToUI(r){ const v=(r||"").toLowerCase(); if (v==="americas") return "NA"; return "EUW"; }
-function linkToProfile(nameTag, uiRegionGuess){ const base = new URL(location.href.replace(/[^/]*$/, "")); const url = new URL("index.html", base); url.searchParams.set("id", nameTag); if (uiRegionGuess) url.searchParams.set("region", uiRegionGuess.toUpperCase()); return url.toString(); }
-function makeNameTag(p){ return (p.riotIdGameName && p.riotIdTagline) ? `${p.riotIdGameName}#${p.riotIdTagline}` : (p.summonerName || "Unknown"); }
+function timeAgo(ts){ if(!ts) return "unknown"; const s=Math.max(1,Math.floor((Date.now()-Number(ts))/1000)); const m=Math.floor(s/60); if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<48) return `${h}h ago`; const d=Math.floor(h/24); return `${d}d ago`; }
+const esc = (s)=> String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
+const stripTags = (html)=> String(html||"").replace(/<[^>]*>/g,"");
 
-function normPlace(p){ return p.placement ?? p.challenges?.arenaPlacement ?? 99; }
-function groupDuoTeams(parts){
-  const sorted = parts.slice().sort((a,b)=> normPlace(a) - normPlace(b));
-  const out = [];
-  for (let i=0;i<sorted.length;i+=2) out.push([sorted[i], sorted[i+1]].filter(Boolean));
-  return out;
-}
+async function fetchJSON(url){ const r = await fetch(url); if (!r.ok) throw new Error(`${r.status}`); return r.json(); }
 
-// --- Tooltip (reuse CSS) ---
-const tipEl = (()=>{ const d=document.createElement('div'); d.id='tooltip'; document.body.appendChild(d); return d; })();
+// Tooltip
+const tipEl = document.getElementById("tooltip");
 function showTip(html, x, y){
   tipEl.innerHTML = String(html).replace(/\n/g,"<br>");
   tipEl.style.left = Math.min(window.innerWidth - tipEl.offsetWidth - 8, x + 14) + "px";
@@ -139,147 +41,174 @@ document.addEventListener('mouseover', (e)=>{
   t.addEventListener('mouseleave', off, { once:true });
 }, true);
 
-// --- Renderers ---
-function renderSummary(match, focus){
-  const info = match?.info || {};
-  const started = info.gameStartTimestamp ? timeStr(info.gameStartTimestamp) : "—";
-  const dur = info.gameDuration ? secondsToMin(info.gameDuration) : "—";
-  const q = info.queueId ?? "—";
-  const myPlace = focus ? normPlace(focus) : null;
-  const placeBadge = Number.isFinite(myPlace)
-    ? `<span class="badge ${myPlace===1?'p1':myPlace===2?'p2':myPlace===3?'p3':'px'}">${ordinal(myPlace)}</span>` : "";
+async function initDDragon(){
+  try {
+    const r = await fetch("https://ddragon.leagueoflegends.com/api/versions.json");
+    if (r.ok){ const arr = await r.json(); if (arr?.[0]) DD_VERSION = arr[0]; }
+  } catch {}
+  try {
+    const r = await fetch(`https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/data/en_US/item.json`);
+    if (r.ok){ const data = await r.json(); ITEM_DB.byId = data.data || {}; }
+  } catch {}
+}
+function isArcaneSweeper(id){
+  const rec = ITEM_DB.byId?.[String(id)];
+  if (!rec) return false;
+  return /arcane\s*sweeper/i.test(rec.name || "");
+}
+function itemTip(id){
+  const rec = ITEM_DB.byId?.[String(id)];
+  if(!rec) return `Item ${id}`;
+  const name = rec.name || `Item ${id}`;
+  const cost = rec.gold?.total ? ` • ${rec.gold.total}g` : "";
+  const desc = rec.plaintext || stripTags(rec.description||"");
+  return `<strong>${name}${cost}</strong>\n${desc}`;
+}
 
-  card.innerHTML = `
-    <div class="match-summary">
-      <div class="left">
-        <h2>Match <span class="muted">${match.metadata?.matchId || ""}</span></h2>
-        <div class="muted">Queue ${q} • ${started} • Duration ${dur}</div>
-      </div>
-      <div class="right">
-        ${focus ? `<div class="pill">You played <strong>${focus.championName}</strong> ${placeBadge}</div>` : ""}
-      </div>
-    </div>
+/* Augments (CommunityDragon) */
+async function initAugments(){
+  const KEY = "arena_aug_db_v1";
+  try {
+    const cached = localStorage.getItem(KEY);
+    if (cached) { Object.assign(AUG_DB, JSON.parse(cached)); return; }
+  } catch {}
+  const url = "https://raw.communitydragon.org/latest/cdragon/arena/en_us.json";
+  const res = await fetch(url, { cache: "force-cache" });
+  const raw = await res.json();
+  const list = Array.isArray(raw) ? raw : (raw.augments || []);
+  const byId = {};
+  for (const a of list) {
+    const id = String(a.id ?? a.augId ?? a.augmentId ?? a.apiName ?? a.name);
+    const name = a.name || a.displayName || a.apiName || `Augment ${id}`;
+    const desc = (a.description || a.tooltip || "").replace(/<br\s*\/?>/gi, "\n");
+    const iconPath = (a.iconPath || a.icon || a.imagePath || "").replace(/^\/+/, "");
+    const icon = iconPath ? `https://raw.communitydragon.org/latest/${iconPath}`.toLowerCase() : "";
+    byId[id] = { id, name, desc, icon };
+  }
+  AUG_DB.byId = byId;
+  try { localStorage.setItem(KEY, JSON.stringify({ byId })); } catch {}
+}
+function getAugmentIds(p){
+  const out = [];
+  if (Array.isArray(p.playerAugmentIds)) out.push(...p.playerAugmentIds);
+  if (Array.isArray(p.augments)) out.push(...p.augments);
+  for (let i=0;i<6;i++){
+    const v = p[`playerAugment${i}`] ?? p[`arenaAugment${i}`];
+    if (Number.isFinite(v)) out.push(v);
+  }
+  return [...new Set(out.map(x => String(x)).filter(Boolean))];
+}
+function renderAugments(p){
+  const ids = getAugmentIds(p);
+  if (!ids.length) return "";
+  return `<div class="augments">` + ids.map(id=>{
+    const a = AUG_DB.byId[String(id)];
+    if (!a) return `<span class="tag muted">#${id}</span>`;
+    const tip = `<strong>${esc(a.name)}</strong>${a.desc?`<br>${esc(a.desc)}`:""}`;
+    return `<img class="aug-ico tip" src="${a.icon}" alt="${a.name}" data-tip="${tip}">`;
+  }).join("") + `</div>`;
+}
+
+/* ---- Page ---- */
+const summary = document.getElementById("summary");
+const teamsBox = document.getElementById("teams");
+
+(async function main(){
+  const u = new URL(location.href);
+  const matchId = u.searchParams.get("id");
+  const region = u.searchParams.get("region") || "europe";
+  const focus = u.searchParams.get("puuid") || "";
+
+  if (!matchId) { summary.innerHTML = `<div class="pill">Missing match id</div>`; return; }
+
+  await initDDragon();
+  await initAugments();
+
+  const data = await fetchJSON(api(`/match?id=${encodeURIComponent(matchId)}&region=${encodeURIComponent(region)}`));
+  const info = data?.info || {};
+  const parts = info.participants || [];
+
+  // group into teams by placement (Arena = duo per place)
+  const byPlace = new Map();
+  for (const p of parts){
+    const place = Number(p.placement ?? p.challenges?.arenaPlacement ?? 0);
+    const arr = byPlace.get(place) || [];
+    arr.push(p);
+    byPlace.set(place, arr);
+  }
+
+  const when = new Date(info.gameStartTimestamp || info.gameStart || 0);
+  summary.innerHTML = `
+    <div class="pill">Queue ${info.queueId ?? "?"}</div>
+    <div class="pill">Played <span class="tip" data-tip="${esc(when.toLocaleString())}">${timeAgo(when.getTime())}</span></div>
+    <div class="pill">Duration ${Math.round((info.gameDuration||0)/60)}m</div>
+    <a class="link" href="./">Search another</a>
   `;
+
+  const places = [...byPlace.keys()].sort((a,b)=>a-b);
+  teamsBox.innerHTML = places.map(place=>{
+    const pair = (byPlace.get(place)||[]).slice(0,2);
+    return teamCard(place, pair, focus, region);
+  }).join("");
+
+  // splash bg on body top — optional flair from winner champ
+  const champSplash = pairChampForSplash(parts, focus);
+  if (champSplash) document.body.style.backgroundImage = `radial-gradient(60% 40% at 50% 15%, rgba(255,138,31,.10), transparent 70%), url('${splashUrl(champSplash)}')`;
+})().catch(err=>{
+  summary.innerHTML = `<div class="pill">Error loading match</div>`;
+  console.error(err);
+});
+
+function pairChampForSplash(parts, focus){
+  const me = parts.find(p=>p.puuid===focus);
+  return me?.championName || parts[0]?.championName || null;
 }
 
-function renderTeams(match, focusId){
-  const parts = match?.info?.participants || [];
-  const pairs = groupDuoTeams(parts);
+function teamCard(place, pair, focus, region){
+  const cls = place===1?"p1":place===2?"p2":place===3?"p3":"px";
+  const head = `
+    <div class="team-head">
+      <div class="team-rank">Team — ${ordinal(place)}</div>
+      <span class="badge ${cls}">${ordinal(place)}</span>
+    </div>`;
 
-  teamsWrap.innerHTML = pairs.map(team=>{
-    const place = team.length ? normPlace(team[0]) : 99;
-    return `
-      <div class="team-card">
-        <div class="team-head">
-          <div class="team-rank">${ordinal(place)}</div>
-        </div>
-        <div class="team-body">
-          ${team.map(p=>{
-            const you  = p.puuid === focusId;
-            const tag  = makeNameTag(p);
-            const href = linkToProfile(tag, uiRegion || routingToUI(routingRegion));
+  const body = pair.map(p=> playerRow(p, focus, region)).join("");
+  return `<article class="team-card">${head}<div class="team-body">${body}</div></article>`;
+}
 
-            const augBadges = [p.playerAugment1,p.playerAugment2,p.playerAugment3,p.playerAugment4]
-              .filter(Boolean)
-              .map(a => {
-                const rec = lookupAug(a);
-                const title = [rec.name, rec.desc].filter(Boolean).join(" — ");
-                const icon = rec.icon ? `<img class="aug-ico" src="${rec.icon}" alt="${rec.name}" title="${title}">` : "";
-                return icon ? icon : `<span class="badge sm" title="${title}">${rec.name}</span>`;
-              }).join("");
+function playerRow(p, focus, region){
+  const me = p.puuid === focus;
+  const ally = false;
+  const url = profileLink(p, region);
+  const ids = [p.item0,p.item1,p.item2,p.item3,p.item4,p.item5,p.item6].filter(x=>Number.isFinite(x)&&x>0).filter(id=>!isArcaneSweeper(id));
+  const items = ids.map(id => `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}">`).join("");
+  const kda = `${p.kills}/${p.deaths}/${p.assists}`;
 
-            const items = [p.item0,p.item1,p.item2,p.item3,p.item4,p.item5,p.item6]
-              .filter(v => Number.isFinite(v) && v>0)
-              .filter(id => !isArcaneSweeper(id))
-              .map(id => `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}" title="">`).join("");
-
-            return `
-              <a class="player ${you?'me':''}" href="${href}">
-                <div class="row">
-                  <img class="champ-ico" src="${champIcon(p.championName)}" alt="${p.championName}">
-                  <div class="col">
-                    <div class="topline"><span class="pname">${tag}</span></div>
-                    <div class="muted tiny">${p.championName} • ${p.kills}/${p.deaths}/${p.assists} KDA</div>
-                    <div class="augments">${augBadges || `<span class="muted tiny">No augments</span>`}</div>
-                    <div class="items small">${items}</div>
-                  </div>
-                  <div class="place">${ordinal(normPlace(p))}</div>
-                </div>
-              </a>`;
-          }).join("")}
-        </div>
+  return `<a class="player ${me?'me':''}" href="${url}">
+    <div class="row">
+      <img class="champ-ico" src="${champIcon(p.championName)}" alt="${p.championName}">
+      <div class="col">
+        <div class="pname">${p.riotIdGameName ? `${p.riotIdGameName}#${p.riotIdTagline}` : (p.summonerName||'Unknown')}</div>
+        <div class="tiny">KDA <strong>${kda}</strong> · ${p.championName}</div>
+        <div class="items">${items}</div>
+        ${renderAugments(p)}
       </div>
-    `;
-  }).join("");
+      <div class="place badge ${placeClass(p)}" title="Final placement">${ordinal(Number(p.placement ?? p.challenges?.arenaPlacement ?? 0))}</div>
+    </div>
+  </a>`;
 }
 
-function renderTable(match, focusId){
-  const parts = (match?.info?.participants||[]).slice().sort((a,b)=> normPlace(a) - normPlace(b));
-
-  tbody.innerHTML = parts.map((p, idx)=>{
-    const isMe = p.puuid === focusId;
-    const placement = normPlace(p);
-    const kda = `${p.kills ?? 0}/${p.deaths ?? 0}/${p.assists ?? 0}`;
-    const dmg = p.totalDamageDealtToChampions ?? p.challenges?.teamDamagePercentage ?? 0;
-    const gold = p.goldEarned ?? 0;
-
-    const tag = makeNameTag(p);
-    const prof = linkToProfile(tag, uiRegion || routingToUI(routingRegion));
-
-    const items = [p.item0,p.item1,p.item2,p.item3,p.item4,p.item5,p.item6]
-      .filter(v => Number.isFinite(v) && v > 0)
-      .filter(id => !isArcaneSweeper(id))
-      .map(id => `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}" style="width:22px;height:22px;border-radius:4px;border:1px solid var(--border)">`).join("");
-
-    const augments = [p.playerAugment1,p.playerAugment2,p.playerAugment3,p.playerAugment4]
-      .filter(Boolean)
-      .map(a => {
-        const rec = lookupAug(a);
-        const title = [rec.name, rec.desc].filter(Boolean).join(" — ");
-        return rec.icon
-          ? `<img class="aug-ico" src="${rec.icon}" alt="${rec.name}" title="${title}">`
-          : `<span class="badge sm" title="${title}">${rec.name}</span>`;
-      }).join(" ");
-
-    const placeCls = placement===1?'p1':placement===2?'p2':placement===3?'p3':'px';
-
-    return `<tr class="${isMe ? "row-me" : ""}">
-      <td>${idx+1}</td>
-      <td><a class="link" href="${prof}">${tag}</a></td>
-      <td class="row"><img src="${champIcon(p.championName)}" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--border);margin-right:6px">${p.championName}</td>
-      <td><span class="badge ${placeCls}">${ordinal(placement)}</span></td>
-      <td>${kda}</td>
-      <td>${Number(gold).toLocaleString()}</td>
-      <td>${Number.isFinite(dmg)?Number(dmg).toLocaleString():"—"}</td>
-      <td>${items || "—"}</td>
-      <td>${augments || "—"}</td>
-    </tr>`;
-  }).join("");
+function placeClass(p){
+  const n = Number(p.placement ?? p.challenges?.arenaPlacement ?? 0);
+  return n===1?"p1":n===2?"p2":n===3?"p3":"px";
 }
 
-// --- Run ---
-(async function(){
-  if (!matchId){
-    card.innerHTML = `<div class="muted">Missing match id.</div>`;
-    return;
-  }
-  if (!uiRegion) uiRegion = routingToUI(routingRegion);
-
-  // back link keeps region
-  const back = new URL(location.href.replace(/[^/]*$/, "")); back.searchParams.set("region", uiRegion);
-  backLink.href = back.toString();
-
-  await Promise.all([initDDragon(), loadAugmentsFromCDragon()]);
-
-  try{
-    const match = await fetchJSON(api(`/match?id=${encodeURIComponent(matchId)}${routingRegion?`&region=${routingRegion}`:""}`));
-    const parts = match?.info?.participants || [];
-    const me = parts.find(p => p.puuid === focusPuuid) || null;
-
-    renderSummary(match, me);
-    renderTeams(match, focusPuuid);
-    renderTable(match, focusPuuid);
-  } catch(err){
-    card.textContent = err.message || "Failed to load match";
-  }
-})();
+function profileLink(p, region){
+  const base = new URL(location.href.replace(/[^/]*$/, ""));
+  const target = new URL("./", base);
+  const id = p.riotIdGameName && p.riotIdTagline ? `${p.riotIdGameName}#${p.riotIdTagline}` : (p.summonerName || "");
+  if (!id.includes("#")) return target.toString();
+  target.searchParams.set("id", id);
+  target.searchParams.set("region", region);
+  return target.toString();
+}
