@@ -5,7 +5,7 @@ const ARENA_QUEUE = 1700;
 const PAGE_SIZE = 100;      // Riot max for /match-ids
 const CHUNK_SIZE = 10;      // <= worker MAX_IDS_PER_REQ (12) to stay WELL under subrequest cap
 const IDS_PAGE_DELAY = 200;
-const CACHE_VERSION = "v7.1";
+const CACHE_VERSION = "v7.2";
 
 function api(pathAndQuery){
   const base = API_BASE.replace(/\/+$/, "");
@@ -120,7 +120,39 @@ function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) r
 function timeAgo(ts){ if(!ts) return "unknown"; const s=Math.max(1,Math.floor((Date.now()-Number(ts))/1000)); const m=Math.floor(s/60); if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<48) return `${h}h ago`; const d=Math.floor(h/24); return `${d}d ago`; }
 function status(t){ statusBox.textContent = t||""; }
 function setLastUpdated(ts){ lastUpdatedEl.textContent = ts ? `Last updated, ${new Date(ts).toLocaleString()}` : ""; }
+const esc = (s)=> String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
+const stripTags = (html)=> String(html||"").replace(/<[^>]*>/g,"");
 
+function itemTip(id){
+  const rec = ITEM_DB.byId?.[String(id)];
+  if(!rec) return `Item ${id}`;
+  const name = rec.name || `Item ${id}`;
+  const cost = rec.gold?.total ? ` • ${rec.gold.total}g` : "";
+  const desc = rec.plaintext || stripTags(rec.description||"");
+  return `<strong>${name}${cost}</strong>\n${desc}`;
+}
+
+// ---- Simple tooltip manager ----
+const tipEl = (()=>{ const d=document.createElement('div'); d.id='tooltip'; document.body.appendChild(d); return d; })();
+function showTip(html, x, y){
+  tipEl.innerHTML = String(html).replace(/\n/g,"<br>");
+  tipEl.style.left = Math.min(window.innerWidth - tipEl.offsetWidth - 8, x + 14) + "px";
+  tipEl.style.top  = Math.min(window.innerHeight - tipEl.offsetHeight - 8, y + 14) + "px";
+  tipEl.classList.add('show');
+}
+function hideTip(){ tipEl.classList.remove('show'); }
+document.addEventListener('mouseover', (e)=>{
+  const t = e.target.closest('[data-tip]');
+  if (!t) return;
+  const content = t.getAttribute('data-tip'); if (!content) return;
+  const move = (ev)=> showTip(content, ev.clientX, ev.clientY);
+  move(e);
+  document.addEventListener('mousemove', move);
+  const off = ()=>{ hideTip(); document.removeEventListener('mousemove', move); t.removeEventListener('mouseleave', off); };
+  t.addEventListener('mouseleave', off, { once:true });
+}, true);
+
+// ---- Data loads ----
 async function fetchJSON(url, tries=3, delay=600){
   const r = await fetch(url);
   if (r.ok) return r.json();
@@ -311,10 +343,13 @@ function renderHistory(forcedList){
         <img src="${champIcon(m.allyChampionName)}" alt="${m.allyChampionName}">
       </div>` : "";
 
-    // items (pequenos)
+    // items (pequenos com tooltip rico)
     const items = [m.item0,m.item1,m.item2,m.item3,m.item4,m.item5,m.item6]
       .filter(v => Number.isFinite(v) && v>0)
-      .map(id => `<img src="${itemIcon(id)}" alt="${id}" title="${itemName(id)}" style="width:18px;height:18px;border-radius:4px;border:1px solid var(--border);margin-right:4px">`).join("");
+      .map(id => `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}" style="width:18px;height:18px;border-radius:4px;border:1px solid var(--border);margin-right:4px">`).join("");
+
+    const when = new Date(m.gameStart);
+    const whenTip = when.toLocaleString();
 
     return `<article class="item" data-id="${m.matchId}" style="--splash:url('${splashUrl(m.championName)}')">
       <div class="icon icon-lg">
@@ -326,7 +361,7 @@ function renderHistory(forcedList){
           <strong>${m.championName}</strong>
           <span class="badge ${cls}" title="Final placement">${ordinal(p)}</span>
         </div>
-        <div class="small">KDA ${m.kills}/${m.deaths}/${m.assists} · Played ${timeAgo(m.gameStart)}</div>
+        <div class="small">KDA ${m.kills}/${m.deaths}/${m.assists} · <span class="tip" data-tip="${esc(whenTip)}">Played ${timeAgo(m.gameStart)}</span></div>
         <div class="items">${items || `<span class="muted small">No items</span>`}</div>
       </div>
     </article>`;
