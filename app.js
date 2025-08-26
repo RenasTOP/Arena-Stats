@@ -5,7 +5,9 @@ const ARENA_QUEUE = 1700;
 const PAGE_SIZE = 100;      // Riot max for /match-ids
 const CHUNK_SIZE = 10;      // <= worker MAX_IDS_PER_REQ (12) to stay WELL under subrequest cap
 const IDS_PAGE_DELAY = 200;
-const CACHE_VERSION = "v7.2";
+
+// IMPORTANT: keep version stable so we don't blow away cache accidentally
+const CACHE_VERSION = "v7";
 
 function api(pathAndQuery){
   const base = API_BASE.replace(/\/+$/, "");
@@ -123,16 +125,7 @@ function setLastUpdated(ts){ lastUpdatedEl.textContent = ts ? `Last updated, ${n
 const esc = (s)=> String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
 const stripTags = (html)=> String(html||"").replace(/<[^>]*>/g,"");
 
-function itemTip(id){
-  const rec = ITEM_DB.byId?.[String(id)];
-  if(!rec) return `Item ${id}`;
-  const name = rec.name || `Item ${id}`;
-  const cost = rec.gold?.total ? ` • ${rec.gold.total}g` : "";
-  const desc = rec.plaintext || stripTags(rec.description||"");
-  return `<strong>${name}${cost}</strong>\n${desc}`;
-}
-
-// ---- Simple tooltip manager ----
+/* ------- Tooltips (items & date) ------- */
 const tipEl = (()=>{ const d=document.createElement('div'); d.id='tooltip'; document.body.appendChild(d); return d; })();
 function showTip(html, x, y){
   tipEl.innerHTML = String(html).replace(/\n/g,"<br>");
@@ -151,6 +144,22 @@ document.addEventListener('mouseover', (e)=>{
   const off = ()=>{ hideTip(); document.removeEventListener('mousemove', move); t.removeEventListener('mouseleave', off); };
   t.addEventListener('mouseleave', off, { once:true });
 }, true);
+
+function itemTip(id){
+  const rec = ITEM_DB.byId?.[String(id)];
+  if(!rec) return `Item ${id}`;
+  const name = rec.name || `Item ${id}`;
+  const cost = rec.gold?.total ? ` • ${rec.gold.total}g` : "";
+  const desc = rec.plaintext || stripTags(rec.description||"");
+  return `<strong>${name}${cost}</strong>\n${desc}`;
+}
+
+/* Hide only the Arena trinket Arcane Sweeper */
+function isArcaneSweeper(id){
+  const rec = ITEM_DB.byId?.[String(id)];
+  if (!rec) return false;
+  return /arcane\s*sweeper/i.test(rec.name || "");
+}
 
 // ---- Data loads ----
 async function fetchJSON(url, tries=3, delay=600){
@@ -171,7 +180,19 @@ async function initDDragon(){
     if (r.ok){ const data = await r.json(); ITEM_DB.byId = data.data || {}; }
   } catch {}
 }
-function loadCache(puuid){ try { return JSON.parse(localStorage.getItem(cacheKey(puuid))||"null"); } catch { return null; } }
+function loadCache(puuid){
+  // try current version first
+  try {
+    const now = localStorage.getItem(cacheKey(puuid));
+    if (now) return JSON.parse(now);
+  } catch {}
+  // legacy keys we may have used briefly
+  const fallbacks = [`arena_cache_v7.2:${puuid}`, `arena_cache_v7:${puuid}`];
+  for (const k of fallbacks){
+    try { const v = localStorage.getItem(k); if (v) return JSON.parse(v); } catch {}
+  }
+  return null;
+}
 function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
 function createStatus(){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; document.body.prepend(el); return el; }
 function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
@@ -207,15 +228,21 @@ async function onSearch(e){
     CURRENT.gameName = acc.gameName; CURRENT.tagLine = acc.tagLine; CURRENT.puuid = acc.puuid;
 
     const cached = loadCache(acc.puuid);
-    if (cached?.matches){
-      Object.assign(CURRENT, { matches: cached.matches, ids: cached.ids||[], region: cached.region||null, lastUpdated: cached.updatedAt||null });
+    CURRENT.region = mapRegionUItoRouting(regionSelect.value);
+
+    if (cached?.matches?.length){
+      // Load from device cache and DO NOT auto-refresh — user can click Update
+      Object.assign(CURRENT, { matches: cached.matches, ids: cached.ids||[], region: cached.region||CURRENT.region, lastUpdated: cached.updatedAt||null });
       populateChampionDatalist();
-      renderAll(); setLastUpdated(cached.updatedAt); status("Refreshing full history…");
-    } else {
-      Object.assign(CURRENT, { matches: [], ids: [], region: null, lastUpdated: null });
+      renderAll();
+      setLastUpdated(cached.updatedAt);
+      status(""); // no nagging banner
+      hideProgress();
+      return; // <— stop here, no refresh
     }
 
-    CURRENT.region = mapRegionUItoRouting(regionSelect.value);
+    // else: first time, fetch everything
+    Object.assign(CURRENT, { matches: [], ids: [], lastUpdated: null });
     await refresh(true);
   } catch(err){ console.error(err); status(err.message || "Error"); hideProgress(); }
 }
@@ -343,10 +370,15 @@ function renderHistory(forcedList){
         <img src="${champIcon(m.allyChampionName)}" alt="${m.allyChampionName}">
       </div>` : "";
 
-    // items (pequenos com tooltip rico)
-    const items = [m.item0,m.item1,m.item2,m.item3,m.item4,m.item5,m.item6]
+    // items (hide Arcane Sweeper if present)
+    const ids = [m.item0,m.item1,m.item2,m.item3,m.item4,m.item5,m.item6]
       .filter(v => Number.isFinite(v) && v>0)
-      .map(id => `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}" style="width:18px;height:18px;border-radius:4px;border:1px solid var(--border);margin-right:4px">`).join("");
+      .filter(id => !isArcaneSweeper(id));
+
+    const items = ids.map(id =>
+      `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}"
+            style="width:18px;height:18px;border-radius:4px;border:1px solid var(--border);margin-right:4px">`
+    ).join("");
 
     const when = new Date(m.gameStart);
     const whenTip = when.toLocaleString();
