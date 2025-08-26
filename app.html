@@ -1,137 +1,124 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ARenas.gg — Profile</title>
-  <link rel="icon" type="image/png" href="logo-ar-icon.png" />
-  <link rel="stylesheet" href="styles.css?v=brand-big" />
+  <meta charset="utf-8">
+  <title>ARenas.gg — Arena profile</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="logo.png">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="topbar">
     <div class="container">
-      <!-- BRAND: wordmark no desktop, ícone no mobile -->
-      <a class="brand" href="./" title="ARenas.gg">
-        <img class="logo-icon" src="logo-ar-icon.png" alt="ARenas.gg">
-        <img class="logo-word" src="logo-ar-wordmark.png" alt="ARenas.gg">
-      </a>
-
-      <nav class="tabs" id="tabs">
-        <button data-tab="matches" class="active">Overview & History</button>
-        <button data-tab="synergy">Duo Synergies</button>
-        <button data-tab="duos">Best Duo Partners</button>
-      </nav>
-
-      <form id="search-form" class="search">
-        <select id="region-select">
-          <option>NA</option>
-          <option selected>EUW</option>
-          <option>EUNE</option>
+      <div class="brand">
+        <img src="logo.png" alt="AR" onerror="this.src='logo.svg'">
+        <img class="word" src="wordmark.png" alt="ARenas.gg" onerror="this.style.display='none'">
+      </div>
+      <form id="search-form" class="search" autocomplete="off">
+        <select id="region-select" aria-label="Region">
+          <option value="EUW">EUW</option>
+          <option value="NA">NA</option>
         </select>
-        <input id="riotid" placeholder="Riot ID (Name#TAG)" />
+        <input id="riotid" placeholder="Riot ID e.g. Renas#CHEGA" required>
         <button type="submit">Search</button>
-        <button type="button" id="btn-update" class="ghost">Update</button>
-        <button type="button" id="btn-pin" class="ghost">☆ Pin</button>
+        <button id="btn-update" type="button" class="ghost">Update</button>
+        <button id="btn-pin" type="button" class="ghost">★ Pin</button>
       </form>
     </div>
   </header>
 
-  <div class="progress-wrap container" id="progress-wrap" hidden>
-    <div class="progress-line"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
-    <div class="progress-text" id="progress-text">Preparing…</div>
-  </div>
+  <div id="status" class="container muted"></div>
 
-  <main class="container layout">
-    <aside class="sidebar">
-      <section class="card">
-        <h3>Pinned & Recent</h3>
-        <div class="muted small">Pinned</div>
-        <div id="pins-list" class="links-list"><div class="muted small">No pinned profiles</div></div>
-        <div class="muted small" style="margin-top:8px">Recent</div>
-        <div id="recents-list" class="links-list"></div>
-      </section>
+  <main class="container">
+    <div class="kpis" id="kpis"></div>
 
-      <section class="card">
-        <h3>Wins checklist</h3>
-        <small class="muted">✓ = 1st place achieved</small>
-        <div id="wins-checklist" class="checklist"></div>
-      </section>
-
-      <section class="card">
-        <h3>Most attempts for a win</h3>
-        <div id="hardest-list" class="tags"></div>
-      </section>
-
-      <section class="card">
-        <div class="section-title">
-          <h3>Placements</h3><small class="muted" id="placements-range">last n games</small>
-        </div>
-        <canvas id="placements-canvas" width="260" height="220"></canvas>
-      </section>
-
-      <div class="muted small" id="last-updated"></div>
-    </aside>
-
-    <section class="content">
-      <div id="tab-matches" class="tab active">
-        <section class="kpis card" id="kpis"></section>
-
-        <div class="filters segmented">
-          <button data-filter="all" class="active">All</button>
-          <button data-filter="wins">1st place</button>
-          <button data-filter="neverwon">Never won</button>
-          <div class="champ-filter">
-            <input id="champ-input" list="champ-datalist" placeholder="Filter by champion…" />
-            <datalist id="champ-datalist"></datalist>
-            <button id="champ-clear" class="ghost sm">Clear</button>
-          </div>
-        </div>
-
-        <section id="matches" class="grid"></section>
-      </div>
-
-      <div id="tab-synergy" class="tab">
+    <div class="layout">
+      <aside class="sidebar">
         <section class="card">
-          <h3>Duo synergies (your ally pair)</h3>
+          <h3 class="section-title">Pinned &amp; Recent</h3>
+          <div class="links-list" id="pinned"></div>
+          <div class="links-list" id="recent"></div>
+        </section>
+
+        <section class="card">
+          <h3 class="section-title">Wins checklist</h3>
+          <div id="wins-checklist" class="checklist"></div>
+        </section>
+
+        <section class="card">
+          <h3 class="section-title">Most attempts for a win</h3>
+          <div id="hardest-list" class="tags"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-title">
+            <h3>Placements</h3>
+            <div id="placements-range" class="muted small"></div>
+          </div>
+          <canvas id="placements-canvas" width="360" height="220"></canvas>
+        </section>
+      </aside>
+
+      <section id="tab-matches" class="tab active">
+        <div class="card">
+          <div class="filters segmented" id="filters">
+            <button class="active" data-filter="all">All</button>
+            <button data-filter="wins">1st place</button>
+            <button data-filter="neverwon">Never won</button>
+
+            <div class="champ-filter">
+              <input id="champ-input" list="champ-datalist" placeholder="Filter by champion…">
+              <datalist id="champ-datalist"></datalist>
+              <button id="champ-clear" class="ghost sm">Clear</button>
+            </div>
+          </div>
+
+          <div id="matches" class="grid"></div>
+          <div class="progress-wrap" id="progress-wrap" hidden>
+            <div class="progress-line"><div class="progress-bar" id="progress-bar"></div></div>
+            <div class="progress-text" id="progress-text"></div>
+          </div>
+          <div id="last-updated" class="muted small" style="margin-top:8px"></div>
+        </div>
+      </section>
+
+      <section id="tab-synergy" class="tab">
+        <div class="card">
+          <h3>Best duo champions</h3>
+          <div class="duo-cards" style="margin:10px 0 16px">
+            <div id="best-duo" class="duo-card">
+              <div class="duo-label">Best WR (≥5 games)</div>
+              <div class="duo-value muted">—</div>
+            </div>
+            <div id="common-duo" class="duo-card">
+              <div class="duo-label">Most played</div>
+              <div class="duo-value muted">—</div>
+            </div>
+          </div>
+
           <table class="table" id="synergy-table">
-            <thead>
-              <tr><th>Ally champion</th><th>Games</th><th>Wins</th><th>Win %</th><th>Avg place</th></tr>
-            </thead>
+            <thead><tr><th>Ally champ</th><th>Games</th><th>Wins</th><th>WR</th><th>Avg</th></tr></thead>
             <tbody></tbody>
           </table>
-        </section>
-      </div>
+        </div>
+      </section>
 
-      <div id="tab-duos" class="tab">
-        <section class="card">
-          <div class="duo-cards">
-            <div class="duo-card" id="best-duo">
-              <div class="duo-label">Best duo (≥5 games)</div>
-              <div class="duo-value muted">—</div>
-            </div>
-            <div class="duo-card" id="common-duo">
-              <div class="duo-label">Most common duo</div>
-              <div class="duo-value muted">—</div>
-            </div>
-          </div>
-        </section>
-        <section class="card">
+      <section id="tab-duos" class="tab">
+        <div class="card">
           <h3>Best Duo Partners</h3>
           <table class="table" id="duo-table">
-            <thead>
-              <tr><th>Player</th><th>Games</th><th>Wins</th><th>Win %</th><th>Avg place</th></tr>
-            </thead>
+            <thead><tr><th>Player</th><th>Games</th><th>Wins</th><th>WR</th><th>Avg</th></tr></thead>
             <tbody></tbody>
           </table>
-        </section>
-      </div>
-    </section>
+        </div>
+      </section>
+    </div>
   </main>
 
-  <footer class="footer">
-    <div class="container muted">Powered by Riot Games API • Icons by Data Dragon</div>
+  <footer class="footer muted small">
+    ARenas.gg (fan site) — data © Riot Games.
   </footer>
 
-  <script type="module" src="app.js?v=brand-big"></script>
+  <script src="app.js"></script>
 </body>
 </html>
