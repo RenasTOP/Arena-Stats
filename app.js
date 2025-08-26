@@ -2,11 +2,9 @@
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
 const ARENA_QUEUE = 1700;
 
-const PAGE_SIZE = 100;      // Riot max for /match-ids
-const CHUNK_SIZE = 10;      // <= worker MAX_IDS_PER_REQ (12) to stay WELL under subrequest cap
+const PAGE_SIZE = 100;
+const CHUNK_SIZE = 10;
 const IDS_PAGE_DELAY = 200;
-
-// IMPORTANT: keep version stable so we don't blow away cache accidentally
 const CACHE_VERSION = "v7";
 
 function api(pathAndQuery){
@@ -123,9 +121,9 @@ function timeAgo(ts){ if(!ts) return "unknown"; const s=Math.max(1,Math.floor((D
 function status(t){ statusBox.textContent = t||""; }
 function setLastUpdated(ts){ lastUpdatedEl.textContent = ts ? `Last updated, ${new Date(ts).toLocaleString()}` : ""; }
 const esc = (s)=> String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
-const stripTags = (html)=> String(html||"").replace(/<[^>]*>/g,"");
+const stripTags = (h)=> String(h||"").replace(/<[^>]*>/g,"");
 
-/* ------- Tooltips (items & date) ------- */
+/* Tooltips */
 const tipEl = (()=>{ const d=document.createElement('div'); d.id='tooltip'; document.body.appendChild(d); return d; })();
 function showTip(html, x, y){
   tipEl.innerHTML = String(html).replace(/\n/g,"<br>");
@@ -153,12 +151,9 @@ function itemTip(id){
   const desc = rec.plaintext || stripTags(rec.description||"");
   return `<strong>${name}${cost}</strong>\n${desc}`;
 }
-
-/* Hide only the Arena trinket Arcane Sweeper */
 function isArcaneSweeper(id){
   const rec = ITEM_DB.byId?.[String(id)];
-  if (!rec) return false;
-  return /arcane\s*sweeper/i.test(rec.name || "");
+  return rec ? /arcane\s*sweeper/i.test(rec.name||"") : false;
 }
 
 // ---- Data loads ----
@@ -181,28 +176,21 @@ async function initDDragon(){
   } catch {}
 }
 function loadCache(puuid){
-  // try current version first
-  try {
-    const now = localStorage.getItem(cacheKey(puuid));
-    if (now) return JSON.parse(now);
-  } catch {}
-  // legacy keys we may have used briefly
+  try { const v = localStorage.getItem(cacheKey(puuid)); if (v) return JSON.parse(v); } catch {}
   const fallbacks = [`arena_cache_v7.2:${puuid}`, `arena_cache_v7:${puuid}`];
-  for (const k of fallbacks){
-    try { const v = localStorage.getItem(k); if (v) return JSON.parse(v); } catch {}
-  }
+  for (const k of fallbacks){ try{ const v=localStorage.getItem(k); if(v) return JSON.parse(v);}catch{} }
   return null;
 }
 function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
 function createStatus(){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; document.body.prepend(el); return el; }
 function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
 
-// ---- Progress UI helpers ----
+/* Progress */
 function showIndeterminate(msg){ progressWrap.hidden=false; progressBar.classList.add('indeterminate'); progressBar.style.width='100%'; progressText.textContent=msg||'Working…'; }
 function showDeterminate(msg,pct){ progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
 function hideProgress(){ progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
 
-// ---- URL prefill & auto-run ----
+/* URL prefill */
 function prefillFromURL(){
   const u = new URL(location.href);
   const id = u.searchParams.get('id');
@@ -214,7 +202,7 @@ function prefillFromURL(){
   }
 }
 
-// ---- Search / Refresh ----
+/* Search / Refresh */
 async function onSearch(e){
   e.preventDefault();
   const raw = riotIdInput.value.trim();
@@ -231,17 +219,15 @@ async function onSearch(e){
     CURRENT.region = mapRegionUItoRouting(regionSelect.value);
 
     if (cached?.matches?.length){
-      // Load from device cache and DO NOT auto-refresh — user can click Update
       Object.assign(CURRENT, { matches: cached.matches, ids: cached.ids||[], region: cached.region||CURRENT.region, lastUpdated: cached.updatedAt||null });
       populateChampionDatalist();
       renderAll();
       setLastUpdated(cached.updatedAt);
-      status(""); // no nagging banner
+      status("");
       hideProgress();
-      return; // <— stop here, no refresh
+      return; // don't auto refresh if cache exists
     }
 
-    // else: first time, fetch everything
     Object.assign(CURRENT, { matches: [], ids: [], lastUpdated: null });
     await refresh(true);
   } catch(err){ console.error(err); status(err.message || "Error"); hideProgress(); }
@@ -250,26 +236,23 @@ async function onSearch(e){
 async function refresh(full){
   if (!CURRENT.puuid) return;
   try{
-    // 1) Get ALL Ids
+    // 1) Fetch all ids
     showIndeterminate("Fetching match IDs…");
-    let allIds = [];
-    let start = 0;
+    let allIds = []; let start = 0;
     for (;;) {
       progressText.textContent = `Fetching match IDs… ${start}–${start + PAGE_SIZE - 1}`;
       const ids = await fetchJSON(api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`));
       if (!ids.length) break;
-      allIds.push(...ids);
-      start += ids.length;
+      allIds.push(...ids); start += ids.length;
       if (ids.length < PAGE_SIZE) break;
       await new Promise(r=>setTimeout(r, IDS_PAGE_DELAY));
     }
     CURRENT.ids = allIds.slice();
 
-    // 2) Fetch details in safe 10-id chunks
+    // 2) details
     const known = new Set(CURRENT.matches.map(m=>m.matchId));
     const toFetch = allIds.filter(id=>!known.has(id));
-    const total = toFetch.length;
-    let fetched = 0;
+    const total = toFetch.length; let fetched = 0;
     showDeterminate(`Fetching match details… 0 / ${total}`, 0);
 
     let collected = [];
@@ -283,7 +266,6 @@ async function refresh(full){
       renderHistory(dedupeById(CURRENT.matches.concat(collected)).sort((a,b)=>b.gameStart-a.gameStart));
     }
 
-    // 3) Merge + cache + render
     CURRENT.matches = dedupeById(collected.concat(CURRENT.matches)).sort((a,b)=>b.gameStart-a.gameStart);
 
     const payload = { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() };
@@ -303,7 +285,7 @@ async function refresh(full){
 
 function dedupeById(list){ const seen=new Set(); const out=[]; for (const m of list){ if(!m?.matchId||seen.has(m.matchId)) continue; seen.add(m.matchId); out.push(m);} return out; }
 
-// ---- Renderers
+/* Renderers */
 function renderAll(){ renderKPIs(); renderSidebar(); renderHistory(); renderSynergy(); renderDuos(); }
 
 function renderKPIs(){
@@ -370,21 +352,20 @@ function renderHistory(forcedList){
         <img src="${champIcon(m.allyChampionName)}" alt="${m.allyChampionName}">
       </div>` : "";
 
-    // items (hide Arcane Sweeper if present)
+    // items (hide Arcane Sweeper)
     const ids = [m.item0,m.item1,m.item2,m.item3,m.item4,m.item5,m.item6]
       .filter(v => Number.isFinite(v) && v>0)
       .filter(id => !isArcaneSweeper(id));
 
     const items = ids.map(id =>
-      `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}"
-            style="width:18px;height:18px;border-radius:4px;border:1px solid var(--border);margin-right:4px">`
+      `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}">`
     ).join("");
 
     const when = new Date(m.gameStart);
     const whenTip = when.toLocaleString();
 
     return `<article class="item" data-id="${m.matchId}" style="--splash:url('${splashUrl(m.championName)}')">
-      <div class="icon icon-lg">
+      <div class="icon">
         <img src="${champIcon(m.championName)}" alt="${m.championName}">
         ${allyIcon}
       </div>
@@ -393,7 +374,7 @@ function renderHistory(forcedList){
           <strong>${m.championName}</strong>
           <span class="badge ${cls}" title="Final placement">${ordinal(p)}</span>
         </div>
-        <div class="small">KDA ${m.kills}/${m.deaths}/${m.assists} · <span class="tip" data-tip="${esc(whenTip)}">Played ${timeAgo(m.gameStart)}</span></div>
+        <div class="meta"><span class="kda">KDA ${m.kills}/${m.deaths}/${m.assists}</span> · <span class="tip" data-tip="${esc(whenTip)}">Played ${timeAgo(m.gameStart)}</span></div>
         <div class="items">${items || `<span class="muted small">No items</span>`}</div>
       </div>
     </article>`;
@@ -434,7 +415,7 @@ function renderSynergy(){
     : `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
 }
 
-// Best Duo Partners (by player; group by allyPuuid)
+/* Best Duo Partners */
 function renderDuos(){
   const agg = new Map();
   const nameMap = new Map();
@@ -469,7 +450,7 @@ function renderDuos(){
     : `<tr><td colspan="5" class="muted">No duo partners found.</td></tr>`;
 }
 
-// ---- Utils
+/* Utils */
 function buildProgress(matches){
   const byChamp = groupBy(matches, m=>m.championName);
   const out = {};
@@ -483,13 +464,11 @@ function buildProgress(matches){
   }
   return out;
 }
-
 function populateChampionDatalist(){
   const set = new Set(CURRENT.matches.map(m=>m.championName).filter(Boolean));
   const opts = [...set].sort((a,b)=>a.localeCompare(b)).map(c=>`<option value="${c}">`).join("");
   champDatalist.innerHTML = opts;
 }
-
 function groupBy(list, fn){ const map={}; for(const x of list){ const k=fn(x); (map[k] ||= []).push(x); } return map; }
 function tile(big,label){ return `<div class="tile"><div class="big">${big}</div><div class="label muted">${label}</div></div>`; }
 
