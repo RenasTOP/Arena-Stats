@@ -375,9 +375,9 @@ function renderHistory(forcedList){
       .filter(v => Number.isFinite(v) && v>0)
       .filter(id => !isArcaneSweeper(id));
 
+    // NOTE: no inline size; let CSS control size/look
     const items = ids.map(id =>
-      `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}"
-            style="width:18px;height:18px;border-radius:4px;border:1px solid var(--border);margin-right:4px">`
+      `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}">`
     ).join("");
 
     const when = new Date(m.gameStart);
