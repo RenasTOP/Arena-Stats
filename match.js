@@ -1,4 +1,4 @@
-// Match details — LoG-style cards + LIVE augment names/icons via CommunityDragon
+// Match details — LoG-style cards + LIVE augment names/icons via CommunityDragon (no json to maintain)
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
 
 // --- Params ---
@@ -21,7 +21,6 @@ const ITEM_DB = { byId:{} };
 
 function champIcon(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`; }
 function itemIcon(id){ return !id||id===0 ? "" : `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/item/${id}.png`; }
-function itemName(id){ const rec = ITEM_DB.byId?.[String(id)]; return rec ? rec.name : `Item ${id}`; }
 const stripTags = (h)=> String(h||"").replace(/<[^>]*>/g,"");
 function itemTip(id){
   const rec = ITEM_DB.byId?.[String(id)];
@@ -29,6 +28,10 @@ function itemTip(id){
   const cost = rec.gold?.total ? ` • ${rec.gold.total}g` : "";
   const desc = rec.plaintext || stripTags(rec.description||"");
   return `<strong>${rec.name}${cost}</strong>\n${desc}`;
+}
+function isArcaneSweeper(id){
+  const rec = ITEM_DB.byId?.[String(id)];
+  return rec ? /arcane\s*sweeper/i.test(rec.name||"") : false;
 }
 const esc = (s)=> String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
 
@@ -116,7 +119,7 @@ function groupDuoTeams(parts){
   return out;
 }
 
-// --- Simple tooltip (reuse same CSS) ---
+// --- Tooltip (reuse CSS) ---
 const tipEl = (()=>{ const d=document.createElement('div'); d.id='tooltip'; document.body.appendChild(d); return d; })();
 function showTip(html, x, y){
   tipEl.innerHTML = String(html).replace(/\n/g,"<br>");
@@ -159,17 +162,6 @@ function renderSummary(match, focus){
   `;
 }
 
-function teamColorClass(place){
-  if (place===1) return "team-gold";
-  if (place===2) return "team-red";
-  if (place===3) return "team-purple";
-  if (place===4) return "team-blue";
-  if (place===5) return "team-green";
-  if (place===6) return "team-pink";
-  if (place===7) return "team-brown";
-  return "team-gray";
-}
-
 function renderTeams(match, focusId){
   const parts = match?.info?.participants || [];
   const pairs = groupDuoTeams(parts);
@@ -198,7 +190,8 @@ function renderTeams(match, focusId){
 
             const items = [p.item0,p.item1,p.item2,p.item3,p.item4,p.item5,p.item6]
               .filter(v => Number.isFinite(v) && v>0)
-              .map(id => `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}" title="${itemName(id)}">`).join("");
+              .filter(id => !isArcaneSweeper(id))
+              .map(id => `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}" title="">`).join("");
 
             return `
               <a class="player ${you?'me':''}" href="${href}">
@@ -235,7 +228,8 @@ function renderTable(match, focusId){
 
     const items = [p.item0,p.item1,p.item2,p.item3,p.item4,p.item5,p.item6]
       .filter(v => Number.isFinite(v) && v > 0)
-      .map(id => `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}" title="${itemName(id)}" style="width:22px;height:22px;border-radius:4px;border:1px solid var(--border)">`).join("");
+      .filter(id => !isArcaneSweeper(id))
+      .map(id => `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}" style="width:22px;height:22px;border-radius:4px;border:1px solid var(--border)">`).join("");
 
     const augments = [p.playerAugment1,p.playerAugment2,p.playerAugment3,p.playerAugment4]
       .filter(Boolean)
@@ -272,8 +266,7 @@ function renderTable(match, focusId){
   if (!uiRegion) uiRegion = routingToUI(routingRegion);
 
   // back link keeps region
-  const back = new URL(location.href.replace(/[^/]*$/, ""));
-  back.searchParams.set("region", uiRegion);
+  const back = new URL(location.href.replace(/[^/]*$/, "")); back.searchParams.set("region", uiRegion);
   backLink.href = back.toString();
 
   await Promise.all([initDDragon(), loadAugmentsFromCDragon()]);
