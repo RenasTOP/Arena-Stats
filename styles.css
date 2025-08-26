@@ -51,7 +51,7 @@ body{
   min-height:72px;padding:6px 16px
 }
 
-/* Brand — swap small icon on mobile for long wordmark on desktop */
+/* Brand */
 .brand{display:flex;align-items:center;gap:10px;text-decoration:none}
 .brand img{display:block;object-fit:contain}
 .brand .logo-icon{height:28px;filter:drop-shadow(0 1px 6px rgba(255,138,61,.35))}
@@ -337,3 +337,18 @@ body.home{
   width:20px;height:20px;border-radius:4px;border:1px solid var(--border);margin-right:6px;vertical-align:middle
 }
 .player .aug-ico{margin-right:4px}
+
+/* =======================
+   Tooltips
+   ======================= */
+#tooltip{
+  position:fixed; z-index:9999; max-width:320px;
+  padding:8px 10px; border-radius:8px;
+  background:#0e131a; color:var(--text); border:1px solid var(--border);
+  box-shadow:var(--shadow); pointer-events:none;
+  opacity:0; transform:translateY(-4px);
+  transition:opacity .08s ease, transform .08s ease;
+  font-size:.92rem; line-height:1.25;
+}
+#tooltip.show{opacity:1; transform:translateY(0)}
+#tooltip strong{color:#ffd0ac}
