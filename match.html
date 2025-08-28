@@ -2,16 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>ARenas.gg, Match</title>
+  <title>ARenas.gg — Match</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="logo-ar-icon.png">
-  <link rel="stylesheet" href="styles.css?v=build10">
+  <link rel="stylesheet" href="styles.css?v=build11">
 </head>
 <body>
   <header class="topbar">
     <div class="container">
       <div class="brand">
-        <a href="./" class="link"><img src="logo-ar-icon.png?v=4" alt="AR"></a>
+        <a href="./" class="logo-link" aria-label="ARenas.gg">
+          <picture>
+            <source media="(min-width:960px)" srcset="logo-ar-wordmark.png?v=5">
+            <img src="logo-ar-icon.png?v=5" alt="ARenas.gg" height="28">
+          </picture>
+        </a>
         <strong>Match</strong>
       </div>
       <a class="link" id="back-link" href="./">← Back to search</a>
@@ -27,8 +32,8 @@
   </main>
 
   <div id="tooltip"></div>
-  <script src="match.js?v=build10"></script>
-  <!-- optional helpers, safe to keep -->
+  <script src="match.js?v=build11"></script>
+  <!-- Optional helpers, safe to keep -->
   <script src="js/arena-strings.js"></script>
   <script src="js/augments-patch.js"></script>
 </body>
