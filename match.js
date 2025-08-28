@@ -21,6 +21,17 @@ const stripTags = (html)=> String(html||"").replace(/<[^>]*>/g,"");
 
 async function fetchJSON(url){ const r = await fetch(url); if (!r.ok) throw new Error(`${r.status}`); return r.json(); }
 
+// --- shared item tooltip helper (global) ---
+window.ITEM_DB = window.ITEM_DB || { byId:{} };
+window.itemTip = window.itemTip || function itemTip(id){
+  const rec = (window.ITEM_DB.byId || {})[String(id)];
+  if (!rec) return `Item ${id}`;
+  const name = rec.name || `Item ${id}`;
+  const cost = rec.gold && rec.gold.total ? ` • ${rec.gold.total}g` : "";
+  const desc = rec.plaintext || String(rec.description||"").replace(/<[^>]*>/g, "");
+  return `<strong>${name}${cost}</strong>\n${desc}`;
+};
+
 // Tooltip
 const tipEl = document.getElementById("tooltip");
 function showTip(html, x, y){
