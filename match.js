@@ -81,8 +81,9 @@ async function initAugments(){
     const id = String(a.id ?? a.augId ?? a.augmentId ?? a.apiName ?? a.name);
     const name = a.name || a.displayName || a.apiName || `Augment ${id}`;
     const desc = (a.description || a.tooltip || "").replace(/<br\s*\/?>/gi, "\n");
-    const iconPath = (a.iconPath || a.icon || a.imagePath || "").replace(/^\/+/, "");
-    // IMPORTANT: keep original case (CDragon paths are case-sensitive)
+    // CDragon paths must be LOWERCASE on raw.communitydragon.org
+    const iconPathRaw = (a.iconPath || a.icon || a.imagePath || "").replace(/^\/+/, "");
+    const iconPath = iconPathRaw.toLowerCase();
     const icon = iconPath ? `https://raw.communitydragon.org/latest/${iconPath}` : "";
     byId[id] = { id, name, desc, icon };
   }
@@ -151,6 +152,16 @@ const teamsBox = document.getElementById("teams");
     const pair = (byPlace.get(place)||[]).slice(0,2);
     return teamCard(place, pair, focus, region);
   }).join("");
+
+  // Replace any broken augment images with a readable text chip
+  document.querySelectorAll('.aug-ico').forEach(img => {
+    img.addEventListener('error', () => {
+      const s = document.createElement('span');
+      s.className = 'tag';
+      s.textContent = img.alt || 'Augment';
+      img.replaceWith(s);
+    }, { once:true });
+  });
 
   // Single splash background (no repeats)
   const champSplash = pairChampForSplash(parts, focus);
