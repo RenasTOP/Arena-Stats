@@ -6,7 +6,6 @@
     let strings = {};
     try { strings = await window.ArenaStrings.get('en_us'); } catch(e){ console.error(e); }
 
-    // upgrade elements that mark augment ids
     const nodes = [
       ...document.querySelectorAll('[data-augment-id]'),
       ...document.querySelectorAll('.augment-id')
@@ -26,7 +25,6 @@
     }
   }
 
-  // run after your match DOM exists, and also when the page changes
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', run);
   } else {
