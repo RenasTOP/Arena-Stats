@@ -205,3 +205,13 @@ body.home{display:grid;place-items:center;min-height:100vh;background:radial-gra
 
 /* Footer */
 .footer{max-width:1100px;margin:28px auto;padding:0 16px 24px;color:#9aa4ad}
+
+/* top two buttons */
+.top-tabs{display:flex;gap:.5rem}
+.top-tabs .tabbtn{padding:.48rem 1rem;border:1px solid #e6e6e6;border-radius:8px;background:#fff;cursor:pointer}
+.top-tabs .tabbtn.active{border-color:#999;font-weight:600}
+
+/* augment tooltip */
+.augment{position:relative;display:inline-block;border-bottom:1px dotted #aaa;cursor:help}
+.augment-tooltip{display:none;position:absolute;left:0;top:1.6em;min-width:220px;max-width:360px;padding:.6rem;border:1px solid #ddd;border-radius:8px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.08);z-index:10}
+.augment:hover .augment-tooltip{display:block}
