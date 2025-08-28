@@ -1,13 +1,14 @@
-// Arena.gg frontend — safe 10-id chunks to avoid Cloudflare subrequest limits
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
+// Arena.gg frontend — safe chunking to avoid worker limits
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
 const ARENA_QUEUE = 1700;
 
-const PAGE_SIZE = 100;      // Riot max for /match-ids
-const CHUNK_SIZE = 10;      // <= worker MAX_IDS_PER_REQ (12)
+const PAGE_SIZE = 100;
+const CHUNK_SIZE = 10;
 const IDS_PAGE_DELAY = 200;
 
-// Keep version stable so we don't blow away cache accidentally
 const CACHE_VERSION = "v7";
+const PIN_KEY = "arena_pins_v1";
+const RECENT_KEY = "arena_recent_v1";
 
 function api(pathAndQuery){
   const base = API_BASE.replace(/\/+$/, "");
@@ -20,6 +21,7 @@ const form = document.getElementById("search-form");
 const riotIdInput = document.getElementById("riotid");
 const regionSelect = document.getElementById("region-select");
 const btnUpdate = document.getElementById("btn-update");
+const btnPin = document.getElementById("btn-pin");
 const matchesBox = document.getElementById("matches");
 const kpisBox = document.getElementById("kpis");
 
@@ -32,6 +34,8 @@ const hardestList = document.getElementById("hardest-list");
 const placementsCanvas = document.getElementById("placements-canvas");
 const placementsRange = document.getElementById("placements-range");
 const lastUpdatedEl = document.getElementById("last-updated");
+const pinnedBox = document.getElementById("pinned");
+const recentBox = document.getElementById("recent");
 
 const filters = document.querySelector("#tab-matches .filters");
 const synergyTableBody = document.querySelector("#synergy-table tbody");
@@ -45,15 +49,8 @@ const progressWrap = document.getElementById("progress-wrap");
 const progressBar  = document.getElementById("progress-bar");
 const progressText = document.getElementById("progress-text");
 
-// Status line (re-use existing #status)
-const statusBox = (() => {
-  const ex = document.getElementById("status");
-  if (ex) return ex;
-  const el = document.createElement("div");
-  el.id = "status"; el.className = "container muted";
-  document.body.prepend(el);
-  return el;
-})();
+// Status line
+const statusBox = document.getElementById("status");
 
 // ---- State ----
 let DD_VERSION = "15.16.1";
@@ -72,7 +69,7 @@ let CURRENT = {
 
 const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
 
-// ---- Top tabs (Overview / Champion Pool / Duo Partners) ----
+// ---- Top tabs ----
 (function wireTopTabs(){
   const buttons = Array.from(document.querySelectorAll('.top-tabs [data-tab]'));
   const panels = new Map([
@@ -80,7 +77,6 @@ const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
     ['synergy', document.getElementById('tab-synergy')],
     ['duos',    document.getElementById('tab-duos')],
   ]);
-
   function show(which){
     buttons.forEach(b => b.classList.toggle('active', b.dataset.tab === which));
     panels.forEach((el, key) => el && el.classList.toggle('active', key === which));
@@ -103,6 +99,7 @@ champClear.addEventListener("click", ()=>{ champInput.value=""; CURRENT.champQue
 // ---- Actions ----
 form.addEventListener("submit", onSearch);
 btnUpdate.addEventListener("click", () => refresh(true));
+btnPin.addEventListener("click", onTogglePin);
 matchesBox.addEventListener("click", (e)=>{
   const card = e.target.closest(".item");
   if (!card) return;
@@ -121,12 +118,12 @@ function splashUrl(name){ const fixed = NAME_FIX[name] || name; return `https://
 function itemIcon(id){ return !id||id===0 ? "" : `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/item/${id}.png`; }
 function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "?"; return `${n}th`; }
 function timeAgo(ts){ if(!ts) return "unknown"; const s=Math.max(1,Math.floor((Date.now()-Number(ts))/1000)); const m=Math.floor(s/60); if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<48) return `${h}h ago`; const d=Math.floor(h/24); return `${d}d ago`; }
-function status(t){ statusBox.textContent = t||""; }
+function status(t){ if (statusBox) statusBox.textContent = t||""; }
 function setLastUpdated(ts){ lastUpdatedEl.textContent = ts ? `Last updated, ${new Date(ts).toLocaleString()}` : ""; }
 const esc = (s)=> String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
 const stripTags = (html)=> String(html||"").replace(/<[^>]*>/g,"");
 
-// Tooltips
+// Tooltips (items & date)
 const tipEl = (()=>{ const d=document.createElement('div'); d.id='tooltip'; document.body.appendChild(d); return d; })();
 function showTip(html, x, y){
   tipEl.innerHTML = String(html).replace(/\n/g,"<br>");
@@ -163,11 +160,11 @@ function isArcaneSweeper(id){
 // ---- Data loads ----
 async function fetchJSON(url, { tries=3, delay=600, timeout=15000 } = {}){
   const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), timeout);
+  const to = setTimeout(()=>ctrl.abort(), timeout);
   try{
     const r = await fetch(url, { signal: ctrl.signal });
     const txt = await r.text().catch(()=> "");
-    if (r.ok) { try { return JSON.parse(txt); } catch { return txt; } }
+    if (r.ok){ try { return JSON.parse(txt); } catch { return txt; } }
     const is429 = r.status===429 || /Riot 429/i.test(txt);
     if (is429 && tries>0){ await new Promise(r=>setTimeout(r, delay)); return fetchJSON(url, { tries:tries-1, delay:delay*2, timeout }); }
     throw new Error(`Request failed, ${r.status}${txt?`, ${txt}`:""}`);
@@ -195,6 +192,59 @@ function loadCache(puuid){
 }
 function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
 function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
+
+// ---- Pins / Recent ----
+function loadPins(){ try{ return JSON.parse(localStorage.getItem(PIN_KEY)||"[]"); }catch{return []} }
+function savePins(arr){ try{ localStorage.setItem(PIN_KEY, JSON.stringify(arr)); }catch{} }
+function loadRecent(){ try{ return JSON.parse(localStorage.getItem(RECENT_KEY)||"[]"); }catch{return []} }
+function saveRecent(arr){ try{ localStorage.setItem(RECENT_KEY, JSON.stringify(arr.slice(0,12))); }catch{} }
+
+function currentKey(){ return CURRENT.puuid || null; }
+function isPinned(){ const pins = loadPins(); const key = currentKey(); return !!(key && pins.some(p=>p.puuid===key)); }
+function updatePinButton(){
+  if (!btnPin) return;
+  btnPin.disabled = !CURRENT.puuid;
+  btnPin.textContent = isPinned() ? "★ Unpin" : "★ Pin";
+}
+function renderPinsAndRecent(){
+  const mk = (p)=> {
+    const q = encodeURIComponent(`${p.gameName}#${p.tagLine}`);
+    const href = `./app.html?id=${q}&region=${(p.uiRegion||"EUW")}`;
+    return `<a class="link-chip" href="${href}">${p.gameName}#${p.tagLine}</a>`;
+  };
+  const pins = loadPins();
+  pinnedBox.innerHTML = pins.length ? pins.map(mk).join("") : `<div class="muted small">No pins yet.</div>`;
+
+  const rec = loadRecent();
+  recentBox.innerHTML = rec.length ? rec.map(mk).join("") : `<div class="muted small">Search someone to add recents.</div>`;
+}
+function onTogglePin(){
+  if (!CURRENT.puuid) return;
+  const pins = loadPins();
+  const idx = pins.findIndex(p=>p.puuid===CURRENT.puuid);
+  if (idx>=0) pins.splice(idx,1);
+  else pins.unshift({
+    puuid: CURRENT.puuid,
+    gameName: CURRENT.gameName,
+    tagLine: CURRENT.tagLine,
+    uiRegion: regionSelect.value || "EUW"
+  });
+  savePins(pins.slice(0,20));
+  updatePinButton();
+  renderPinsAndRecent();
+}
+function pushRecent(){
+  if (!CURRENT.puuid) return;
+  const rec = loadRecent().filter(r=>r.puuid!==CURRENT.puuid);
+  rec.unshift({
+    puuid: CURRENT.puuid,
+    gameName: CURRENT.gameName,
+    tagLine: CURRENT.tagLine,
+    uiRegion: regionSelect.value || "EUW"
+  });
+  saveRecent(rec);
+  renderPinsAndRecent();
+}
 
 // Progress helpers
 function showIndeterminate(msg){ progressWrap.hidden=false; progressBar.classList.add('indeterminate'); progressBar.style.width='100%'; progressText.textContent=msg||'Working…'; }
@@ -227,6 +277,10 @@ async function onSearch(e){
     CURRENT.gameName = acc.gameName; CURRENT.tagLine = acc.tagLine; CURRENT.puuid = acc.puuid;
     CURRENT.region = mapRegionUItoRouting(regionSelect.value);
 
+    pushRecent();
+    updatePinButton();
+    renderPinsAndRecent();
+
     const cached = loadCache(acc.puuid);
     if (cached?.matches?.length){
       Object.assign(CURRENT, { matches: cached.matches, ids: cached.ids||[], region: cached.region||CURRENT.region, lastUpdated: cached.updatedAt||null });
@@ -242,10 +296,9 @@ async function onSearch(e){
   } catch(err){ console.error(err); status(err.message || "Error"); hideProgress(); }
 }
 
-async function refresh(full){
+async function refresh(){
   if (!CURRENT.puuid) return;
   try{
-    // 1) IDs
     showIndeterminate("Fetching match IDs…");
     let allIds = [];
     let start = 0;
@@ -258,16 +311,15 @@ async function refresh(full){
       if (ids.length < PAGE_SIZE) break;
       await new Promise(r=>setTimeout(r, IDS_PAGE_DELAY));
     }
-    CURRENT.ids = allIds.slice();
-
-    // 2) Details (new only)
     const known = new Set(CURRENT.matches.map(m=>m.matchId));
     const toFetch = allIds.filter(id=>!known.has(id));
     const total = toFetch.length;
+    CURRENT.ids = allIds.slice();
+
     let fetched = 0;
+    let collected = [];
     showDeterminate(`Fetching match details… 0 / ${total}`, 0);
 
-    let collected = [];
     for (let i=0;i<toFetch.length;i+=CHUNK_SIZE){
       const slice = toFetch.slice(i, i+CHUNK_SIZE);
       const part = await fetchJSON(api(`/matches?ids=${slice.join(",")}&puuid=${CURRENT.puuid}&region=${CURRENT.region}`));
@@ -278,8 +330,9 @@ async function refresh(full){
       renderHistory(dedupeById(CURRENT.matches.concat(collected)).sort((a,b)=>b.gameStart-a.gameStart));
     }
 
-    // 3) Merge + cache + render
+    const before = CURRENT.matches.length;
     CURRENT.matches = dedupeById(collected.concat(CURRENT.matches)).sort((a,b)=>b.gameStart-a.gameStart);
+    const added = CURRENT.matches.length - before;
 
     const payload = { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() };
     saveCache(CURRENT.puuid, payload);
@@ -288,7 +341,7 @@ async function refresh(full){
     populateChampionDatalist();
     renderAll();
     hideProgress();
-    status("");
+    status(added>0 ? `Updated ${added} new match${added===1?"":"es"}.` : `Already up-to-date.`);
   } catch(err){
     console.error(err);
     status(err.message || "Refresh failed");
@@ -318,6 +371,8 @@ function renderKPIs(){
 }
 
 function renderSidebar(){
+  renderPinsAndRecent();
+
   const byChamp = groupBy(CURRENT.matches, m=>m.championName);
   const rows = Object.keys(byChamp)
     .filter(name => byChamp[name].some(m=>m.placement===1))
@@ -339,8 +394,8 @@ function renderSidebar(){
 
   const counts = Array(8).fill(0);
   for (const m of CURRENT.matches){ const p=Number(m.placement); if (p>=1 && p<=8) counts[p-1]++; }
-  if (placementsRange) placementsRange.textContent = `last ${CURRENT.matches.length} games`;
-  if (placementsCanvas) drawPlacementBars(placementsCanvas, counts);
+  placementsRange.textContent = `last ${CURRENT.matches.length} games`;
+  drawPlacementBars(placementsCanvas, counts);
 }
 
 function renderHistory(forcedList){
@@ -483,7 +538,6 @@ function populateChampionDatalist(){
 function groupBy(list, fn){ const map={}; for(const x of list){ const k=fn(x); (map[k] ||= []).push(x); } return map; }
 function tile(big,label){ return `<div class="tile"><div class="big">${big}</div><div class="label muted">${label}</div></div>`; }
 
-// Placement bars
 function drawPlacementBars(canvas, counts){
   const ctx = canvas.getContext("2d"); if(!ctx) return;
   const W=canvas.width, H=canvas.height;
@@ -521,16 +575,12 @@ function drawPlacementBars(canvas, counts){
   }
 }
 
-// Boot
+// Kick off
 prefillFromURL();
 
-// errors -> status (so “Looking up account…” never hangs forever)
-(function watchErrors(){
-  const el = document.getElementById('status');
-  const show = (msg)=>{ if (el) el.textContent = msg; console.error(msg); };
-  window.addEventListener('error', e => show('Error, ' + (e.error?.message || e.message || 'unknown')));
-  window.addEventListener('unhandledrejection', e => {
-    const r = e.reason; const msg = (r && (r.message || r.toString())) || 'unknown';
-    show('Error, ' + msg);
-  });
-})();
+// errors -> status
+window.addEventListener('error', e => { status('Error, ' + (e.error?.message || e.message || 'unknown')); });
+window.addEventListener('unhandledrejection', e => {
+  const r = e.reason; const msg = (r && (r.message || r.toString())) || 'unknown';
+  status('Error, ' + msg);
+});
