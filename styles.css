@@ -156,7 +156,7 @@ body.match{
 /* Duo cards */
 .duo-cards{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:10px}
 .duo-card{border:1px solid var(--border);border-radius:12px;background:#0e131a;padding:12px;box-shadow:var(--shadow)}
-.duo-label{color:var(--muted);font-size:.9rem;margin-bottom:6px}
+.duo-label{color:#var(--muted);font-size:.9rem;margin-bottom:6px}
 .duo-value img{width:18px;height:18px;border-radius:4px;border:1px solid var(--border);vertical-align:middle;margin-right:6px}
 
 /* Progress */
@@ -184,7 +184,7 @@ body.home{display:grid;place-items:center;min-height:100vh;background:radial-gra
 .tagline{color:#b7c2cb;margin:6px 0 16px}
 .home-search{display:flex;gap:8px;justify-content:center;max-width:720px;margin:0 auto 14px}
 
-/* Match page cards */
+/* Match page */
 .match-summary{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .match-summary .pill{background:#0e131a;border:1px solid var(--border);padding:8px 12px;border-radius:999px}
 .link{color:#9ecbff;text-decoration:none}
@@ -212,7 +212,7 @@ body.home{display:grid;place-items:center;min-height:100vh;background:radial-gra
 /* Footer */
 .footer{max-width:1100px;margin:28px auto;padding:0 16px 24px;color:#9aa4ad}
 
-/* Top two buttons on profile */
+/* top two buttons */
 .top-tabs{display:flex;gap:.5rem}
 .top-tabs .tabbtn{padding:.48rem 1rem;border:1px solid #e6e6e6;border-radius:8px;background:#fff;cursor:pointer;font-weight:600;transition:background .15s ease, border-color .15s ease, transform .05s ease}
 .top-tabs .tabbtn:hover{background:#f7f7f7}
