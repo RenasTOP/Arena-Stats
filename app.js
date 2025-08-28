@@ -1,4 +1,4 @@
-// Arena.gg frontend, safe 10-id chunks to avoid Cloudflare subrequest limits
+// Arena.gg frontend — safe 10-id chunks to avoid Cloudflare subrequest limits
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
 const ARENA_QUEUE = 1700;
 
@@ -6,7 +6,7 @@ const PAGE_SIZE = 100;      // Riot max for /match-ids
 const CHUNK_SIZE = 10;      // <= worker MAX_IDS_PER_REQ (12)
 const IDS_PAGE_DELAY = 200;
 
-// Keep version stable so we do not blow away cache accidentally
+// Keep version stable so we don't blow away cache accidentally
 const CACHE_VERSION = "v7";
 
 function api(pathAndQuery){
@@ -45,8 +45,15 @@ const progressWrap = document.getElementById("progress-wrap");
 const progressBar  = document.getElementById("progress-bar");
 const progressText = document.getElementById("progress-text");
 
-// Status line
-const statusBox = createStatus();
+// Status line (re-use existing #status)
+const statusBox = (() => {
+  const ex = document.getElementById("status");
+  if (ex) return ex;
+  const el = document.createElement("div");
+  el.id = "status"; el.className = "container muted";
+  document.body.prepend(el);
+  return el;
+})();
 
 // ---- State ----
 let DD_VERSION = "15.16.1";
@@ -65,23 +72,21 @@ let CURRENT = {
 
 const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
 
-// ---- Tabs (simple, using the two buttons you added) ----
+// ---- Top tabs (Overview / Champion Pool / Duo Partners) ----
 (function wireTopTabs(){
-  const btnMatches = document.getElementById('tabbtn-matches');
-  const btnDuos = document.getElementById('tabbtn-duos');
-  const tabMatches = document.getElementById('tab-matches');
-  const tabDuos = document.getElementById('tab-duos');
-  if (!btnMatches || !btnDuos || !tabMatches || !tabDuos) return;
+  const buttons = Array.from(document.querySelectorAll('.top-tabs [data-tab]'));
+  const panels = new Map([
+    ['matches', document.getElementById('tab-matches')],
+    ['synergy', document.getElementById('tab-synergy')],
+    ['duos',    document.getElementById('tab-duos')],
+  ]);
 
   function show(which){
-    const isMatches = which === 'matches';
-    tabMatches.classList.toggle('active', isMatches);
-    tabDuos.classList.toggle('active', !isMatches);
-    btnMatches.classList.toggle('active', isMatches);
-    btnDuos.classList.toggle('active', !isMatches);
+    buttons.forEach(b => b.classList.toggle('active', b.dataset.tab === which));
+    panels.forEach((el, key) => el && el.classList.toggle('active', key === which));
   }
-  btnMatches.addEventListener('click', () => show('matches'));
-  btnDuos.addEventListener('click', () => show('duos'));
+  buttons.forEach(b => b.addEventListener('click', () => show(b.dataset.tab)));
+  show('matches');
 })();
 
 // ---- Filters ----
@@ -114,7 +119,6 @@ matchesBox.addEventListener("click", (e)=>{
 function champIcon(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`; }
 function splashUrl(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${encodeURIComponent(fixed)}_0.jpg`; }
 function itemIcon(id){ return !id||id===0 ? "" : `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/item/${id}.png`; }
-function itemName(id){ const rec = ITEM_DB.byId?.[String(id)]; return rec ? rec.name : `Item ${id}`; }
 function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "?"; return `${n}th`; }
 function timeAgo(ts){ if(!ts) return "unknown"; const s=Math.max(1,Math.floor((Date.now()-Number(ts))/1000)); const m=Math.floor(s/60); if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<48) return `${h}h ago`; const d=Math.floor(h/24); return `${d}d ago`; }
 function status(t){ statusBox.textContent = t||""; }
@@ -122,7 +126,7 @@ function setLastUpdated(ts){ lastUpdatedEl.textContent = ts ? `Last updated, ${n
 const esc = (s)=> String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
 const stripTags = (html)=> String(html||"").replace(/<[^>]*>/g,"");
 
-// tooltips
+// Tooltips
 const tipEl = (()=>{ const d=document.createElement('div'); d.id='tooltip'; document.body.appendChild(d); return d; })();
 function showTip(html, x, y){
   tipEl.innerHTML = String(html).replace(/\n/g,"<br>");
@@ -150,8 +154,6 @@ function itemTip(id){
   const desc = rec.plaintext || stripTags(rec.description||"");
   return `<strong>${name}${cost}</strong>\n${desc}`;
 }
-
-/* hide only the Arena trinket Arcane Sweeper */
 function isArcaneSweeper(id){
   const rec = ITEM_DB.byId?.[String(id)];
   if (!rec) return false;
@@ -159,30 +161,21 @@ function isArcaneSweeper(id){
 }
 
 // ---- Data loads ----
-async function fetchJSON(url, opts = {}){
-  const { tries = 3, delay = 600, timeout = 15000 } = opts;
-  const controller = new AbortController();
-  const to = setTimeout(() => controller.abort(), timeout);
-  try {
-    const r = await fetch(url, { signal: controller.signal });
+async function fetchJSON(url, { tries=3, delay=600, timeout=15000 } = {}){
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), timeout);
+  try{
+    const r = await fetch(url, { signal: ctrl.signal });
     const txt = await r.text().catch(()=> "");
-    if (r.ok) {
-      try { return JSON.parse(txt); } catch { return txt; }
-    }
-    const is429 = r.status === 429 || /Riot 429/i.test(txt);
-    if (is429 && tries > 0){
-      await new Promise(r => setTimeout(r, delay));
-      return fetchJSON(url, { tries: tries - 1, delay: delay * 2, timeout });
-    }
+    if (r.ok) { try { return JSON.parse(txt); } catch { return txt; } }
+    const is429 = r.status===429 || /Riot 429/i.test(txt);
+    if (is429 && tries>0){ await new Promise(r=>setTimeout(r, delay)); return fetchJSON(url, { tries:tries-1, delay:delay*2, timeout }); }
     throw new Error(`Request failed, ${r.status}${txt?`, ${txt}`:""}`);
-  } catch (e){
+  } catch(e){
     if (e.name === "AbortError") throw new Error("Request timed out");
     throw e;
-  } finally {
-    clearTimeout(to);
-  }
+  } finally { clearTimeout(to); }
 }
-
 async function initDDragon(){
   try {
     const r = await fetch("https://ddragon.leagueoflegends.com/api/versions.json");
@@ -201,15 +194,6 @@ function loadCache(puuid){
   return null;
 }
 function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
-function createStatus(){
-  const existing = document.getElementById("status");
-  if (existing) return existing;
-  const el = document.createElement("div");
-  el.id = "status";
-  el.className = "container muted";
-  document.body.prepend(el);
-  return el;
-}
 function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
 
 // Progress helpers
@@ -217,7 +201,7 @@ function showIndeterminate(msg){ progressWrap.hidden=false; progressBar.classLis
 function showDeterminate(msg,pct){ progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
 function hideProgress(){ progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
 
-// URL prefill and autorun
+// URL prefill & autorun
 function prefillFromURL(){
   const u = new URL(location.href);
   const id = u.searchParams.get('id');
@@ -238,7 +222,7 @@ async function onSearch(e){
   await initDDragon();
 
   try{
-    status("Looking up account, …");
+    status("Looking up account…");
     const acc = await fetchJSON(api(`/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`));
     CURRENT.gameName = acc.gameName; CURRENT.tagLine = acc.tagLine; CURRENT.puuid = acc.puuid;
     CURRENT.region = mapRegionUItoRouting(regionSelect.value);
@@ -262,11 +246,11 @@ async function refresh(full){
   if (!CURRENT.puuid) return;
   try{
     // 1) IDs
-    showIndeterminate("Fetching match IDs, …");
+    showIndeterminate("Fetching match IDs…");
     let allIds = [];
     let start = 0;
     for (;;) {
-      progressText.textContent = `Fetching match IDs, ${start}–${start + PAGE_SIZE - 1}`;
+      progressText.textContent = `Fetching match IDs… ${start}–${start + PAGE_SIZE - 1}`;
       const ids = await fetchJSON(api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`));
       if (!ids.length) break;
       allIds.push(...ids);
@@ -281,7 +265,7 @@ async function refresh(full){
     const toFetch = allIds.filter(id=>!known.has(id));
     const total = toFetch.length;
     let fetched = 0;
-    showDeterminate(`Fetching match details, 0 / ${total}`, 0);
+    showDeterminate(`Fetching match details… 0 / ${total}`, 0);
 
     let collected = [];
     for (let i=0;i<toFetch.length;i+=CHUNK_SIZE){
@@ -290,11 +274,11 @@ async function refresh(full){
       collected = collected.concat(part);
       fetched += slice.length;
       const pct = total ? Math.round((100*fetched)/total) : 100;
-      showDeterminate(`Fetching match details, ${Math.min(fetched,total)} / ${total}`, pct);
+      showDeterminate(`Fetching match details… ${Math.min(fetched,total)} / ${total}`, pct);
       renderHistory(dedupeById(CURRENT.matches.concat(collected)).sort((a,b)=>b.gameStart-a.gameStart));
     }
 
-    // 3) Merge and cache and render
+    // 3) Merge + cache + render
     CURRENT.matches = dedupeById(collected.concat(CURRENT.matches)).sort((a,b)=>b.gameStart-a.gameStart);
 
     const payload = { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() };
@@ -325,7 +309,7 @@ function renderKPIs(){
   const total = list.length;
   const champs = new Set(list.map(m=>m.championName)).size;
   kpisBox.innerHTML = [
-    tile(`${CURRENT.gameName ? `${CURRENT.gameName}#${CURRENT.tagLine}` : ","}`,"Player"),
+    tile(`${CURRENT.gameName ? `${CURRENT.gameName}#${CURRENT.tagLine}` : "—"}`,"Player"),
     tile(`${total}`,"Games loaded"),
     tile(`${avg}`,"Average place"),
     tile(`${wins}`,"1st places"),
@@ -418,7 +402,7 @@ function renderSynergy(){
   }
   const rows = Object.values(agg)
     .filter(x=>x.ally!=="Unknown")
-    .map(x=>({ ...x, wr: x.games ? Math.round((100*x.wins)/x.games) : 0, avg: x.games ? (x.sumPlace/x.games).toFixed(2) : "," }));
+    .map(x=>({ ...x, wr: x.games ? Math.round((100*x.wins)/x.games) : 0, avg: x.games ? (x.sumPlace/x.games).toFixed(2) : "—" }));
 
   if (bestDuoEl && commonDuoEl) {
     const enough = rows.filter(x => x.games >= 5);
@@ -443,7 +427,6 @@ function renderSynergy(){
     : `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
 }
 
-// Best Duo Partners, by player
 function renderDuos(){
   const agg = new Map();
   const nameMap = new Map();
@@ -462,7 +445,7 @@ function renderDuos(){
   const rows = [...agg.values()].map(s => {
     const name = s.puuid ? (nameMap.get(s.puuid) || s.display || "Unknown") : s.display;
     const wr = s.games ? Math.round((100*s.wins)/s.games) : 0;
-    const avg = s.games ? (s.sumPlace/s.games).toFixed(2) : ",";
+    const avg = s.games ? (s.sumPlace/s.games).toFixed(2) : "—";
     return { name, games: s.games, wins: s.wins, wr, avg };
   }).sort((a,b)=> b.games - a.games);
 
@@ -492,16 +475,15 @@ function buildProgress(matches){
   }
   return out;
 }
-
 function populateChampionDatalist(){
   const set = new Set(CURRENT.matches.map(m=>m.championName).filter(Boolean));
   const opts = [...set].sort((a,b)=>a.localeCompare(b)).map(c=>`<option value="${c}">`).join("");
   champDatalist.innerHTML = opts;
 }
-
 function groupBy(list, fn){ const map={}; for(const x of list){ const k=fn(x); (map[k] ||= []).push(x); } return map; }
 function tile(big,label){ return `<div class="tile"><div class="big">${big}</div><div class="label muted">${label}</div></div>`; }
 
+// Placement bars
 function drawPlacementBars(canvas, counts){
   const ctx = canvas.getContext("2d"); if(!ctx) return;
   const W=canvas.width, H=canvas.height;
@@ -539,29 +521,16 @@ function drawPlacementBars(canvas, counts){
   }
 }
 
-// kick off
+// Boot
 prefillFromURL();
 
-// force current logo
-(function fixBrandLogo(){
-  const logo = document.getElementById('brand-logo');
-  const word = document.getElementById('brand-wordmark');
-  if (logo) logo.src = 'logo-ar-icon.png?v=4';
-  if (word) word.src = 'logo-ar-wordmark.png?v=4';
-})();
-
-// errors, show instead of infinite spinner
+// errors -> status (so “Looking up account…” never hangs forever)
 (function watchErrors(){
-  const $status = document.getElementById('status');
-  function showStatus(msg){
-    if ($status) $status.textContent = msg;
-    console.error(msg);
-  }
-  window.addEventListener('error', (e) => {
-    showStatus('Error, ' + (e.error?.message || e.message || 'unknown'));
-  });
-  window.addEventListener('unhandledrejection', (e) => {
-    const msg = (e.reason && (e.reason.message || e.reason.toString())) || 'unknown';
-    showStatus('Error, ' + msg);
+  const el = document.getElementById('status');
+  const show = (msg)=>{ if (el) el.textContent = msg; console.error(msg); };
+  window.addEventListener('error', e => show('Error, ' + (e.error?.message || e.message || 'unknown')));
+  window.addEventListener('unhandledrejection', e => {
+    const r = e.reason; const msg = (r && (r.message || r.toString())) || 'unknown';
+    show('Error, ' + msg);
   });
 })();
