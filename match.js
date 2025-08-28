@@ -151,7 +151,7 @@ const teamsBox = document.getElementById("teams");
     return teamCard(place, pair, focus, region);
   }).join("");
 
-  // splash bg on body top — optional flair from winner champ
+  // winner champ splash
   const champSplash = pairChampForSplash(parts, focus);
   if (champSplash) document.body.style.backgroundImage = `radial-gradient(60% 40% at 50% 15%, rgba(255,138,31,.10), transparent 70%), url('${splashUrl(champSplash)}')`;
 })().catch(err=>{
@@ -163,7 +163,6 @@ function pairChampForSplash(parts, focus){
   const me = parts.find(p=>p.puuid===focus);
   return me?.championName || parts[0]?.championName || null;
 }
-
 function teamCard(place, pair, focus, region){
   const cls = place===1?"p1":place===2?"p2":place===3?"p3":"px";
   const head = `
@@ -171,19 +170,15 @@ function teamCard(place, pair, focus, region){
       <div class="team-rank">Team — ${ordinal(place)}</div>
       <span class="badge ${cls}">${ordinal(place)}</span>
     </div>`;
-
   const body = pair.map(p=> playerRow(p, focus, region)).join("");
   return `<article class="team-card">${head}<div class="team-body">${body}</div></article>`;
 }
-
 function playerRow(p, focus, region){
   const me = p.puuid === focus;
-  const ally = false;
   const url = profileLink(p, region);
   const ids = [p.item0,p.item1,p.item2,p.item3,p.item4,p.item5,p.item6].filter(x=>Number.isFinite(x)&&x>0).filter(id=>!isArcaneSweeper(id));
   const items = ids.map(id => `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}">`).join("");
   const kda = `${p.kills}/${p.deaths}/${p.assists}`;
-
   return `<a class="player ${me?'me':''}" href="${url}">
     <div class="row">
       <img class="champ-ico" src="${champIcon(p.championName)}" alt="${p.championName}">
@@ -197,12 +192,10 @@ function playerRow(p, focus, region){
     </div>
   </a>`;
 }
-
 function placeClass(p){
   const n = Number(p.placement ?? p.challenges?.arenaPlacement ?? 0);
   return n===1?"p1":n===2?"p2":n===3?"p3":"px";
 }
-
 function profileLink(p, region){
   const base = new URL(location.href.replace(/[^/]*$/, ""));
   const target = new URL("./", base);
