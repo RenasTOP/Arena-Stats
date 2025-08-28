@@ -4,16 +4,22 @@
   <meta charset="utf-8">
   <title>ARenas.gg, Arena profile</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="icon" href="logo-ar-icon.png?v=4">
-  <link rel="stylesheet" href="styles.css?v=build10">
+  <link rel="icon" href="logo-ar-icon.png?v=5">
+  <link rel="stylesheet" href="styles.css?v=build11">
 </head>
 <body>
   <header class="topbar">
     <div class="container">
       <div class="brand">
-        <img id="brand-logo" src="logo-ar-icon.png?v=4" alt="AR">
-        <img id="brand-wordmark" class="word" src="logo-ar-wordmark.png?v=4" alt="ARenas.gg">
+        <!-- ONE logo: wordmark on desktop, icon on mobile -->
+        <a href="./" class="logo-link" aria-label="ARenas.gg">
+          <picture id="brand-picture">
+            <source media="(min-width:960px)" srcset="logo-ar-wordmark.png?v=5">
+            <img src="logo-ar-icon.png?v=5" alt="ARenas.gg" height="28">
+          </picture>
+        </a>
       </div>
+
       <form id="search-form" class="search" autocomplete="off">
         <select id="region-select" aria-label="Region">
           <option value="EUW">EUW</option>
@@ -27,11 +33,12 @@
     </div>
   </header>
 
-  <!-- small two button header -->
+  <!-- Blitz-like top tabs -->
   <div class="container" style="margin-top:8px">
-    <nav class="top-tabs" id="top-tabs">
-      <button id="tabbtn-matches" class="tabbtn active">Info and Matches</button>
-      <button id="tabbtn-duos" class="tabbtn">Duo Partners</button>
+    <nav class="top-tabs" role="tablist">
+      <button data-tab="matches" class="tabbtn active" role="tab" aria-selected="true">Overview</button>
+      <button data-tab="synergy" class="tabbtn" role="tab" aria-selected="false">Champion Pool</button>
+      <button data-tab="duos" class="tabbtn" role="tab" aria-selected="false">Duo Partners</button>
     </nav>
   </div>
 
@@ -96,11 +103,11 @@
           <div class="duo-cards" style="margin:10px 0 16px">
             <div id="best-duo" class="duo-card">
               <div class="duo-label">Best WR (≥5 games)</div>
-              <div class="duo-value muted">,</div>
+              <div class="duo-value muted">—</div>
             </div>
             <div id="common-duo" class="duo-card">
               <div class="duo-label">Most played</div>
-              <div class="duo-value muted">,</div>
+              <div class="duo-value muted">—</div>
             </div>
           </div>
 
@@ -127,6 +134,6 @@
     ARenas.gg, fan site, data © Riot Games.
   </footer>
 
-  <script src="app.js?v=build10"></script>
+  <script src="app.js?v=build11"></script>
 </body>
 </html>
