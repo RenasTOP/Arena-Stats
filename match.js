@@ -65,55 +65,72 @@ function itemTip(id){
   return `<strong>${name}${cost}</strong>\n${desc}`;
 }
 
-/* Augments (CommunityDragon) */
+/* Augments — use the official cherry-augments list (has icons) */
 async function initAugments(){
-  const KEY = "arena_aug_db_v1";
+  const KEY = "arena_aug_db_v2";
   try {
     const cached = localStorage.getItem(KEY);
     if (cached) { Object.assign(AUG_DB, JSON.parse(cached)); return; }
   } catch {}
-  const url = "https://raw.communitydragon.org/latest/cdragon/arena/en_us.json";
-  const res = await fetch(url, { cache: "no-store" });
-  const raw = await res.json();
-  const list = Array.isArray(raw) ? raw : (raw.augments || []);
-  const byId = {};
-  for (const a of list) {
-    const id = String(a.id ?? a.augId ?? a.augmentId ?? a.apiName ?? a.name);
-    const name = a.name || a.displayName || a.apiName || `Augment ${id}`;
-    const desc = (a.description || a.tooltip || "").replace(/<br\s*\/?>/gi, "\n");
 
-    // Build a CDN path that works:
-    // - lower-case everything
-    // - rewrite "lol-game-data/assets/..." → "game/..."
-    const rawPath = (a.iconPath || a.icon || a.imagePath || "").replace(/^\/+/, "");
-    const lower = rawPath.toLowerCase();
-    const normalized = lower.replace(/^lol-game-data\/assets\//, "game/");
-    const icon = normalized ? `https://cdn.communitydragon.org/latest/${normalized}` : "";
+  let raw = null;
 
-    byId[id] = { id, name, desc, icon };
+  // 1) preferred – client game-data list with iconPath
+  try{
+    const r = await fetch("https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/cherry-augments.json", { cache: "force-cache" });
+    if (r.ok) raw = await r.json();
+  }catch{}
+
+  // 2) fallback – older cdragon export
+  if (!raw){
+    const r = await fetch("https://raw.communitydragon.org/latest/cdragon/arena/en_us.json", { cache: "force-cache" });
+    raw = await r.json();
   }
+
+  const byId = {};
+  const list = Array.isArray(raw) ? raw : (raw.augments || raw || []);
+  for (const a of list){
+    const id = String(a.id ?? a.augmentId ?? a.AugmentId ?? a.apiName ?? a.name);
+    const name = a.name || a.displayName || a.apiName || `Augment ${id}`;
+
+    // icons: iconPath usually lives on both files
+    const iconPath = (a.iconPath || a.icon || a.imagePath || "").replace(/^\/+/, "");
+    const icon = iconPath ? `https://raw.communitydragon.org/latest/${iconPath}` : "";
+
+    // description: clean placeholders like @Value@
+    let desc = a.longDesc || a.description || a.tooltip || a.tooltipSimple || "";
+    desc = String(desc)
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/@[^@]+@/g, "")   // strip unresolved tokens (better than showing garbage)
+      .replace(/\s+/g," ")
+      .trim();
+
+    byId[id] = { id, name, icon, desc };
+  }
+
   AUG_DB.byId = byId;
   try { localStorage.setItem(KEY, JSON.stringify({ byId })); } catch {}
 }
-// Only keep real ids (>0)
+
 function getAugmentIds(p){
   const out = [];
   if (Array.isArray(p.playerAugmentIds)) out.push(...p.playerAugmentIds);
   if (Array.isArray(p.augments)) out.push(...p.augments);
   for (let i=0;i<6;i++){
     const v = p[`playerAugment${i}`] ?? p[`arenaAugment${i}`];
-    if (Number.isFinite(v) && v > 0) out.push(v);
+    if (Number.isFinite(v)) out.push(v);
   }
-  return [...new Set(out.map(x => Number(x)).filter(n => Number.isFinite(n) && n > 0))];
+  return [...new Set(out.map(x => String(x)).filter(Boolean))];
 }
 function renderAugments(p){
   const ids = getAugmentIds(p);
   if (!ids.length) return "";
   return `<div class="augments">` + ids.map(id=>{
-    const rec = AUG_DB.byId[String(id)];
-    if (!rec) return `<span class="tag muted">#${id}</span>`;
-    const tip = `<strong>${esc(rec.name)}</strong>${rec.desc?`<br>${esc(rec.desc)}`:""}`;
-    return `<img class="aug-ico tip" src="${rec.icon}" alt="${rec.name}" loading="lazy" referrerpolicy="no-referrer" data-tip="${tip}">`;
+    const a = AUG_DB.byId[String(id)];
+    if (!a) return `<span class="tag muted">Augment #${id}</span>`;
+    const tip = `<strong>${esc(a.name)}</strong>${a.desc?`<br>${esc(a.desc)}`:""}`;
+    const onerr = "this.onerror=null;this.remove();";
+    return `<img class="aug-ico tip" src="${a.icon}" alt="${a.name}" data-tip="${tip}" onerror="${onerr}">`;
   }).join("") + `</div>`;
 }
 
@@ -159,28 +176,11 @@ const teamsBox = document.getElementById("teams");
     return teamCard(place, pair, focus, region);
   }).join("");
 
-  // Replace any broken augment images with a readable text chip (keeps tooltip)
-  document.querySelectorAll('.aug-ico').forEach(img => {
-    img.addEventListener('error', () => {
-      const chip = document.createElement('span');
-      chip.className = 'tag tip';
-      chip.textContent = img.alt || 'Augment';
-      const tip = img.getAttribute('data-tip') || '';
-      if (tip) chip.setAttribute('data-tip', tip);
-      img.replaceWith(chip);
-    }, { once:true });
-  });
-
-  // Single splash background (no repeats)
+  // Single, non-repeating splash
   const champSplash = pairChampForSplash(parts, focus);
-  if (champSplash) {
-    document.body.classList.add('has-splash');
+  if (champSplash){
     document.body.style.backgroundImage =
       `radial-gradient(60% 40% at 50% 15%, rgba(255,138,31,.10), transparent 70%), url('${splashUrl(champSplash)}')`;
-    document.body.style.backgroundRepeat = 'no-repeat, no-repeat';
-    document.body.style.backgroundSize = '100% 320px, cover';
-    document.body.style.backgroundPosition = 'center top, center top';
-    document.body.style.backgroundAttachment = 'scroll, fixed';
   }
 })().catch(err=>{
   summary.innerHTML = `<div class="pill">Error loading match</div>`;
@@ -191,6 +191,7 @@ function pairChampForSplash(parts, focus){
   const me = parts.find(p=>p.puuid===focus);
   return me?.championName || parts[0]?.championName || null;
 }
+
 function teamCard(place, pair, focus, region){
   const cls = place===1?"p1":place===2?"p2":place===3?"p3":"px";
   const head = `
@@ -198,17 +199,18 @@ function teamCard(place, pair, focus, region){
       <div class="team-rank">Team — ${ordinal(place)}</div>
       <span class="badge ${cls}">${ordinal(place)}</span>
     </div>`;
+
   const body = pair.map(p=> playerRow(p, focus, region)).join("");
   return `<article class="team-card">${head}<div class="team-body">${body}</div></article>`;
 }
+
 function playerRow(p, focus, region){
   const me = p.puuid === focus;
   const url = profileLink(p, region);
-  const ids = [p.item0,p.item1,p.item2,p.item3,p.item4,p.item5,p.item6]
-    .filter(x=>Number.isFinite(x)&&x>0)
-    .filter(id=>!isArcaneSweeper(id));
+  const ids = [p.item0,p.item1,p.item2,p.item3,p.item4,p.item5,p.item6].filter(x=>Number.isFinite(x)&&x>0).filter(id=>!isArcaneSweeper(id));
   const items = ids.map(id => `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}">`).join("");
   const kda = `${p.kills}/${p.deaths}/${p.assists}`;
+
   return `<a class="player ${me?'me':''}" href="${url}">
     <div class="row">
       <img class="champ-ico" src="${champIcon(p.championName)}" alt="${p.championName}">
@@ -222,10 +224,12 @@ function playerRow(p, focus, region){
     </div>
   </a>`;
 }
+
 function placeClass(p){
   const n = Number(p.placement ?? p.challenges?.arenaPlacement ?? 0);
   return n===1?"p1":n===2?"p2":n===3?"p3":"px";
 }
+
 function profileLink(p, region){
   const base = new URL(location.href.replace(/[^/]*$/, ""));
   const target = new URL("./", base);
