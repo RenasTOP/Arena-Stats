@@ -58,16 +58,17 @@ let DD_VERSION = "15.16.1";
 const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Khazix", VelKoz:"Velkoz", ChoGath:"Chogath", KaiSa:"Kaisa", LeBlanc:"Leblanc", DrMundo:"DrMundo", Nunu:"Nunu", Renata:"Renata", RekSai:"RekSai", KogMaw:"KogMaw", BelVeth:"Belveth", TahmKench:"TahmKench" };
 const ITEM_DB = { byId:{} };
 
-// --- shared item tooltip helper (global) ---
+/* ---- global itemTip binding + shared item DB ---- */
 window.ITEM_DB = window.ITEM_DB || { byId:{} };
-window.itemTip = window.itemTip || function itemTip(id){
+function itemTip(id){
   const rec = (window.ITEM_DB.byId || {})[String(id)];
   if (!rec) return `Item ${id}`;
   const name = rec.name || `Item ${id}`;
   const cost = rec.gold && rec.gold.total ? ` • ${rec.gold.total}g` : "";
   const desc = rec.plaintext || String(rec.description||"").replace(/<[^>]*>/g, "");
   return `<strong>${name}${cost}</strong>\n${desc}`;
-};
+}
+window.itemTip = itemTip;
 
 let CURRENT = {
   gameName: "", tagLine: "",
@@ -218,7 +219,7 @@ async function initDDragon(){
   } catch {}
   try {
     const r = await fetch(`https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/data/en_US/item.json`);
-    if (r.ok){ const data = await r.json(); ITEM_DB.byId = data.data || {}; }
+    if (r.ok){ const data = await r.json(); ITEM_DB.byId = data.data || {}; window.ITEM_DB.byId = ITEM_DB.byId; }
   } catch {}
 }
 function loadCache(puuid){
