@@ -11,6 +11,7 @@ const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Kha
 const ITEM_DB = { byId:{} };
 const AUG_DB = { byId:{} };
 
+// icons & misc
 function champIcon(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`; }
 function itemIcon(id){ return !id||id===0 ? "" : `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/item/${id}.png`; }
 function splashUrl(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${encodeURIComponent(fixed)}_0.jpg`; }
@@ -21,16 +22,17 @@ const stripTags = (html)=> String(html||"").replace(/<[^>]*>/g,"");
 
 async function fetchJSON(url){ const r = await fetch(url); if (!r.ok) throw new Error(`${r.status}`); return r.json(); }
 
-// --- shared item tooltip helper (global) ---
+/* ---- global itemTip binding + shared item DB ---- */
 window.ITEM_DB = window.ITEM_DB || { byId:{} };
-window.itemTip = window.itemTip || function itemTip(id){
+function itemTip(id){
   const rec = (window.ITEM_DB.byId || {})[String(id)];
   if (!rec) return `Item ${id}`;
   const name = rec.name || `Item ${id}`;
   const cost = rec.gold && rec.gold.total ? ` • ${rec.gold.total}g` : "";
   const desc = rec.plaintext || String(rec.description||"").replace(/<[^>]*>/g, "");
   return `<strong>${name}${cost}</strong>\n${desc}`;
-};
+}
+window.itemTip = itemTip;
 
 // Tooltip
 const tipEl = document.getElementById("tooltip");
@@ -59,7 +61,7 @@ async function initDDragon(){
   } catch {}
   try {
     const r = await fetch(`https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/data/en_US/item.json`);
-    if (r.ok){ const data = await r.json(); ITEM_DB.byId = data.data || {}; }
+    if (r.ok){ const data = await r.json(); ITEM_DB.byId = data.data || {}; window.ITEM_DB.byId = ITEM_DB.byId; }
   } catch {}
 }
 function isArcaneSweeper(id){
@@ -67,16 +69,8 @@ function isArcaneSweeper(id){
   if (!rec) return false;
   return /arcane\s*sweeper/i.test(rec.name || "");
 }
-function itemTip(id){
-  const rec = ITEM_DB.byId?.[String(id)];
-  if(!rec) return `Item ${id}`;
-  const name = rec.name || `Item ${id}`;
-  const cost = rec.gold?.total ? ` • ${rec.gold.total}g` : "";
-  const desc = rec.plaintext || stripTags(rec.description||"");
-  return `<strong>${name}${cost}</strong>\n${desc}`;
-}
 
-/* Augments — use the official cherry-augments list (has icons) */
+/* Augments — prefer the “cherry-augments” list (has icons); fall back to cdragon arena */
 async function initAugments(){
   const KEY = "arena_aug_db_v2";
   try {
@@ -86,13 +80,11 @@ async function initAugments(){
 
   let raw = null;
 
-  // 1) preferred – client game-data list with iconPath
   try{
     const r = await fetch("https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/cherry-augments.json", { cache: "force-cache" });
     if (r.ok) raw = await r.json();
   }catch{}
 
-  // 2) fallback – older cdragon export
   if (!raw){
     const r = await fetch("https://raw.communitydragon.org/latest/cdragon/arena/en_us.json", { cache: "force-cache" });
     raw = await r.json();
@@ -103,16 +95,14 @@ async function initAugments(){
   for (const a of list){
     const id = String(a.id ?? a.augmentId ?? a.AugmentId ?? a.apiName ?? a.name);
     const name = a.name || a.displayName || a.apiName || `Augment ${id}`;
-
-    // icons: iconPath usually lives on both files
     const iconPath = (a.iconPath || a.icon || a.imagePath || "").replace(/^\/+/, "");
     const icon = iconPath ? `https://raw.communitydragon.org/latest/${iconPath}` : "";
 
-    // description: clean placeholders like @Value@
-    let desc = a.longDesc || a.description || a.tooltip || a.tooltipSimple || "";
+    let desc = a.shortDesc || a.tooltipSimple || a.tooltip || a.longDesc || a.description || "";
     desc = String(desc)
       .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/@[^@]+@/g, "")   // strip unresolved tokens (better than showing garbage)
+      .replace(/%[^%]+%/g, "")
+      .replace(/@[^@]+@/g, "")
       .replace(/\s+/g," ")
       .trim();
 
