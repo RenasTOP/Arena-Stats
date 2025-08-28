@@ -510,3 +510,31 @@ function drawPlacementBars(canvas, counts){
 
 // kick off
 prefillFromURL();
+
+// force current logo, prevent old one coming back
+(function fixBrandLogo(){
+  const logo = document.getElementById('brand-logo');
+  const word = document.getElementById('brand-wordmark');
+  if (logo) logo.src = 'logo.png?v=2';
+  if (word) word.src = 'wordmark.png?v=2';
+})();
+
+// top two buttons toggle for existing tabs
+(function wireTopTabs(){
+  const btnMatches = document.getElementById('tabbtn-matches');
+  const btnDuos = document.getElementById('tabbtn-duos');
+  const tabMatches = document.getElementById('tab-matches');
+  const tabDuos = document.getElementById('tab-duos');
+  if (!btnMatches || !btnDuos || !tabMatches || !tabDuos) return;
+
+  function show(which){
+    const isMatches = which === 'matches';
+    tabMatches.classList.toggle('active', isMatches);
+    tabDuos.classList.toggle('active', !isMatches);
+    btnMatches.classList.toggle('active', isMatches);
+    btnDuos.classList.toggle('active', !isMatches);
+  }
+  btnMatches.addEventListener('click', () => show('matches'));
+  btnDuos.addEventListener('click', () => show('duos'));
+})();
+
