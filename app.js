@@ -538,3 +538,47 @@ prefillFromURL();
   btnDuos.addEventListener('click', () => show('duos'));
 })();
 
+// 1) force current logo, prevent old one showing again
+(function fixBrandLogo(){
+  try{
+    const logo = document.getElementById('brand-logo');
+    const word = document.getElementById('brand-wordmark');
+    if (logo) logo.src = 'logo.png?v=3';
+    if (word) word.src = 'wordmark.png?v=3';
+  }catch(e){}
+})();
+
+// 2) wire the two buttons to toggle your existing tabs
+(function wireTopTabs(){
+  const btnMatches = document.getElementById('tabbtn-matches');
+  const btnDuos = document.getElementById('tabbtn-duos');
+  const tabMatches = document.getElementById('tab-matches');
+  const tabDuos = document.getElementById('tab-duos');
+  if (!btnMatches || !btnDuos || !tabMatches || !tabDuos) return;
+
+  function show(which){
+    const isMatches = which === 'matches';
+    tabMatches.classList.toggle('active', isMatches);
+    tabDuos.classList.toggle('active', !isMatches);
+    btnMatches.classList.toggle('active', isMatches);
+    btnDuos.classList.toggle('active', !isMatches);
+  }
+  btnMatches.addEventListener('click', () => show('matches'));
+  btnDuos.addEventListener('click', () => show('duos'));
+})();
+
+// 3) safety, show errors instead of infinite "Looking up account…"
+(function watchErrors(){
+  const $status = document.getElementById('status');
+  function showStatus(msg){
+    if ($status) $status.textContent = msg;
+  }
+  window.addEventListener('error', (e) => {
+    showStatus('Error, ' + (e.error?.message || e.message || 'unknown'));
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const msg = (e.reason && (e.reason.message || e.reason.toString())) || 'unknown';
+    showStatus('Error, ' + msg);
+  });
+})();
+
