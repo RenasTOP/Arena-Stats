@@ -73,7 +73,7 @@ async function initAugments(){
     if (cached) { Object.assign(AUG_DB, JSON.parse(cached)); return; }
   } catch {}
   const url = "https://raw.communitydragon.org/latest/cdragon/arena/en_us.json";
-  const res = await fetch(url, { cache: "force-cache" });
+  const res = await fetch(url, { cache: "no-store" });
   const raw = await res.json();
   const list = Array.isArray(raw) ? raw : (raw.augments || []);
   const byId = {};
@@ -82,7 +82,8 @@ async function initAugments(){
     const name = a.name || a.displayName || a.apiName || `Augment ${id}`;
     const desc = (a.description || a.tooltip || "").replace(/<br\s*\/?>/gi, "\n");
     const iconPath = (a.iconPath || a.icon || a.imagePath || "").replace(/^\/+/, "");
-    const icon = iconPath ? `https://raw.communitydragon.org/latest/${iconPath}`.toLowerCase() : "";
+    // IMPORTANT: keep original case (CDragon paths are case-sensitive)
+    const icon = iconPath ? `https://raw.communitydragon.org/latest/${iconPath}` : "";
     byId[id] = { id, name, desc, icon };
   }
   AUG_DB.byId = byId;
@@ -105,7 +106,7 @@ function renderAugments(p){
     const a = AUG_DB.byId[String(id)];
     if (!a) return `<span class="tag muted">#${id}</span>`;
     const tip = `<strong>${esc(a.name)}</strong>${a.desc?`<br>${esc(a.desc)}`:""}`;
-    return `<img class="aug-ico tip" src="${a.icon}" alt="${a.name}" data-tip="${tip}">`;
+    return `<img class="aug-ico tip" src="${a.icon}" alt="${a.name}" loading="lazy" referrerpolicy="no-referrer" data-tip="${tip}">`;
   }).join("") + `</div>`;
 }
 
@@ -151,9 +152,17 @@ const teamsBox = document.getElementById("teams");
     return teamCard(place, pair, focus, region);
   }).join("");
 
-  // winner champ splash
+  // Single splash background (no repeats)
   const champSplash = pairChampForSplash(parts, focus);
-  if (champSplash) document.body.style.backgroundImage = `radial-gradient(60% 40% at 50% 15%, rgba(255,138,31,.10), transparent 70%), url('${splashUrl(champSplash)}')`;
+  if (champSplash) {
+    document.body.classList.add('has-splash');
+    document.body.style.backgroundImage =
+      `radial-gradient(60% 40% at 50% 15%, rgba(255,138,31,.10), transparent 70%), url('${splashUrl(champSplash)}')`;
+    document.body.style.backgroundRepeat = 'no-repeat, no-repeat';
+    document.body.style.backgroundSize = '100% 320px, cover';
+    document.body.style.backgroundPosition = 'center top, center top';
+    document.body.style.backgroundAttachment = 'scroll, fixed';
+  }
 })().catch(err=>{
   summary.innerHTML = `<div class="pill">Error loading match</div>`;
   console.error(err);
