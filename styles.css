@@ -21,19 +21,10 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-appl
 .topbar{position:sticky;top:0;background:rgba(15,18,22,.78);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);z-index:10}
 .topbar .container{max-width:1100px;margin:0 auto;padding:10px 16px;display:flex;gap:12px;align-items:center;justify-content:space-between}
 .brand{display:flex;gap:10px;align-items:center}
-.brand img{height:28px}
-.brand .word{height:24px;display:none}
-@media (min-width: 960px){ .brand .word{display:block} }
+.brand img{height:28px;display:block}
 
 /* Generic layout */
 .container{max-width:1100px;margin:16px auto;padding:0 16px}
-.tabs{display:flex;gap:8px}
-.tabs button{
-  background:#202736;border:1px solid var(--border);color:var(--text);
-  padding:8px 12px;border-radius:12px;cursor:pointer;transition:transform .06s ease, background .12s ease, box-shadow .12s ease;
-}
-.tabs button:hover{transform:translateY(-1px)}
-.tabs button.active{background:var(--orange);color:#16181d;box-shadow:0 3px 12px rgba(255,138,31,.35)}
 .tab{display:none}
 .tab.active{display:block}
 
@@ -133,9 +124,6 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-appl
 .table th,.table td{border-bottom:1px solid var(--border);padding:8px 6px;text-align:left}
 .table tbody tr{transition:background .12s ease}
 .table tbody tr:hover{background:#111821}
-.table td a.link{color:#9ecbff;text-decoration:none}
-.table td a.link:hover{text-decoration:underline}
-.row-me{background:#0e1a25}
 
 /* Wins widget */
 .checklist{display:grid;grid-template-columns:repeat(auto-fill,minmax(32px,1fr));gap:8px}
@@ -177,23 +165,21 @@ body.home{display:grid;place-items:center;min-height:100vh;background:radial-gra
 .tagline{color:#b7c2cb;margin:6px 0 16px}
 .home-search{display:flex;gap:8px;justify-content:center;max-width:720px;margin:0 auto 14px}
 
-/* Match page */
+/* Match page bits reused */
 .match-summary{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .match-summary .pill{background:#0e131a;border:1px solid var(--border);padding:8px 12px;border-radius:999px}
 .link{color:#9ecbff;text-decoration:none}
 .link:hover{text-decoration:underline}
 
+/* Teams grid (for match.html) */
 .teams-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
 .team-card{border:1px solid var(--border);border-radius:12px;background:#0e131a;box-shadow:var(--shadow)}
 .team-head{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .team-rank{font-weight:700}
 .team-body{padding:8px;display:flex;flex-direction:column;gap:8px}
-
 .player{display:block;border:1px solid var(--border);border-radius:10px;padding:8px;text-decoration:none;color:inherit;background:#0f141b}
 .player:hover{background:#121a24}
 .player.me{outline:1px solid #2db06b}
-.player.ally{outline:1px dashed #2db06b}
-
 .player .row{display:flex;gap:8px;align-items:flex-start}
 .player .col{flex:1;min-width:0}
 .player .pname{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -206,39 +192,27 @@ body.home{display:grid;place-items:center;min-height:100vh;background:radial-gra
 /* Footer */
 .footer{max-width:1100px;margin:28px auto;padding:0 16px 24px;color:#9aa4ad}
 
-/* top two buttons */
-.top-tabs{display:flex;gap:.5rem}
-.top-tabs .tabbtn{padding:.48rem 1rem;border:1px solid #e6e6e6;border-radius:8px;background:#fff;cursor:pointer}
-.top-tabs .tabbtn.active{border-color:#999;font-weight:600}
+/* --- Top tabs (segmented, Blitz-like) --- */
+.top-tabs{display:flex;gap:8px;align-items:center}
+.tabbtn{
+  padding:.55rem 1rem;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:#202736;
+  color:var(--text);
+  font-weight:700;
+  cursor:pointer;
+  transition:transform .06s ease, background .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.tabbtn:hover{transform:translateY(-1px)}
+.tabbtn.active{
+  background:var(--orange);
+  color:#16181d;
+  border-color:transparent;
+  box-shadow:0 4px 16px rgba(255,138,31,.35);
+}
 
-/* augment tooltip */
+/* Augment tooltip (used by optional augments-patch) */
 .augment{position:relative;display:inline-block;border-bottom:1px dotted #aaa;cursor:help}
 .augment-tooltip{display:none;position:absolute;left:0;top:1.6em;min-width:220px;max-width:360px;padding:.6rem;border:1px solid #ddd;border-radius:8px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.08);z-index:10}
-.augment:hover .augment-tooltip{display:block}
-
-/* top two buttons */
-.top-tabs{display:flex;gap:.5rem}
-.top-tabs .tabbtn{
-  padding:.5rem 1rem;
-  border:1px solid #e6e6e6;
-  border-radius:8px;
-  background:#fff;
-  cursor:pointer;
-  font-weight:600;
-  transition:background .15s ease, border-color .15s ease, transform .05s ease;
-}
-.top-tabs .tabbtn:hover{background:#f7f7f7}
-.top-tabs .tabbtn:active{transform:translateY(1px)}
-.top-tabs .tabbtn.active{
-  background:#ff6a0015; /* soft orange tint */
-  border-color:#ff6a00; /* orange border */
-}
-
-/* augment tooltip, used on match pages */
-.augment{position:relative;display:inline-block;border-bottom:1px dotted #aaa;cursor:help}
-.augment-tooltip{
-  display:none;position:absolute;left:0;top:1.6em;min-width:220px;max-width:360px;
-  padding:.6rem;border:1px solid #ddd;border-radius:8px;background:#fff;
-  box-shadow:0 4px 16px rgba(0,0,0,.08);z-index:10
-}
 .augment:hover .augment-tooltip{display:block}
