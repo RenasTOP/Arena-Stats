@@ -81,33 +81,39 @@ async function initAugments(){
     const id = String(a.id ?? a.augId ?? a.augmentId ?? a.apiName ?? a.name);
     const name = a.name || a.displayName || a.apiName || `Augment ${id}`;
     const desc = (a.description || a.tooltip || "").replace(/<br\s*\/?>/gi, "\n");
-    // CDragon paths must be LOWERCASE on raw.communitydragon.org
-    const iconPathRaw = (a.iconPath || a.icon || a.imagePath || "").replace(/^\/+/, "");
-    const iconPath = iconPathRaw.toLowerCase();
-    const icon = iconPath ? `https://raw.communitydragon.org/latest/${iconPath}` : "";
+
+    // Build a CDN path that works:
+    // - lower-case everything
+    // - rewrite "lol-game-data/assets/..." → "game/..."
+    const rawPath = (a.iconPath || a.icon || a.imagePath || "").replace(/^\/+/, "");
+    const lower = rawPath.toLowerCase();
+    const normalized = lower.replace(/^lol-game-data\/assets\//, "game/");
+    const icon = normalized ? `https://cdn.communitydragon.org/latest/${normalized}` : "";
+
     byId[id] = { id, name, desc, icon };
   }
   AUG_DB.byId = byId;
   try { localStorage.setItem(KEY, JSON.stringify({ byId })); } catch {}
 }
+// Only keep real ids (>0)
 function getAugmentIds(p){
   const out = [];
   if (Array.isArray(p.playerAugmentIds)) out.push(...p.playerAugmentIds);
   if (Array.isArray(p.augments)) out.push(...p.augments);
   for (let i=0;i<6;i++){
     const v = p[`playerAugment${i}`] ?? p[`arenaAugment${i}`];
-    if (Number.isFinite(v)) out.push(v);
+    if (Number.isFinite(v) && v > 0) out.push(v);
   }
-  return [...new Set(out.map(x => String(x)).filter(Boolean))];
+  return [...new Set(out.map(x => Number(x)).filter(n => Number.isFinite(n) && n > 0))];
 }
 function renderAugments(p){
   const ids = getAugmentIds(p);
   if (!ids.length) return "";
   return `<div class="augments">` + ids.map(id=>{
-    const a = AUG_DB.byId[String(id)];
-    if (!a) return `<span class="tag muted">#${id}</span>`;
-    const tip = `<strong>${esc(a.name)}</strong>${a.desc?`<br>${esc(a.desc)}`:""}`;
-    return `<img class="aug-ico tip" src="${a.icon}" alt="${a.name}" loading="lazy" referrerpolicy="no-referrer" data-tip="${tip}">`;
+    const rec = AUG_DB.byId[String(id)];
+    if (!rec) return `<span class="tag muted">#${id}</span>`;
+    const tip = `<strong>${esc(rec.name)}</strong>${rec.desc?`<br>${esc(rec.desc)}`:""}`;
+    return `<img class="aug-ico tip" src="${rec.icon}" alt="${rec.name}" loading="lazy" referrerpolicy="no-referrer" data-tip="${tip}">`;
   }).join("") + `</div>`;
 }
 
@@ -153,13 +159,15 @@ const teamsBox = document.getElementById("teams");
     return teamCard(place, pair, focus, region);
   }).join("");
 
-  // Replace any broken augment images with a readable text chip
+  // Replace any broken augment images with a readable text chip (keeps tooltip)
   document.querySelectorAll('.aug-ico').forEach(img => {
     img.addEventListener('error', () => {
-      const s = document.createElement('span');
-      s.className = 'tag';
-      s.textContent = img.alt || 'Augment';
-      img.replaceWith(s);
+      const chip = document.createElement('span');
+      chip.className = 'tag tip';
+      chip.textContent = img.alt || 'Augment';
+      const tip = img.getAttribute('data-tip') || '';
+      if (tip) chip.setAttribute('data-tip', tip);
+      img.replaceWith(chip);
     }, { once:true });
   });
 
@@ -196,7 +204,9 @@ function teamCard(place, pair, focus, region){
 function playerRow(p, focus, region){
   const me = p.puuid === focus;
   const url = profileLink(p, region);
-  const ids = [p.item0,p.item1,p.item2,p.item3,p.item4,p.item5,p.item6].filter(x=>Number.isFinite(x)&&x>0).filter(id=>!isArcaneSweeper(id));
+  const ids = [p.item0,p.item1,p.item2,p.item3,p.item4,p.item5,p.item6]
+    .filter(x=>Number.isFinite(x)&&x>0)
+    .filter(id=>!isArcaneSweeper(id));
   const items = ids.map(id => `<img class="tip" data-tip="${esc(itemTip(id))}" src="${itemIcon(id)}" alt="${id}">`).join("");
   const kda = `${p.kills}/${p.deaths}/${p.assists}`;
   return `<a class="player ${me?'me':''}" href="${url}">
