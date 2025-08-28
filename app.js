@@ -1,4 +1,4 @@
-// Arena.gg frontend — safe 10-id chunks to avoid Cloudflare subrequest limits
+// Arena.gg frontend, safe 10-id chunks to avoid Cloudflare subrequest limits
 const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
 const ARENA_QUEUE = 1700;
 
@@ -6,7 +6,7 @@ const PAGE_SIZE = 100;      // Riot max for /match-ids
 const CHUNK_SIZE = 10;      // <= worker MAX_IDS_PER_REQ (12)
 const IDS_PAGE_DELAY = 200;
 
-// Keep version stable so we don't blow away cache accidentally
+// Keep version stable so we do not blow away cache accidentally
 const CACHE_VERSION = "v7";
 
 function api(pathAndQuery){
@@ -65,15 +65,24 @@ let CURRENT = {
 
 const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
 
-// ---- Tabs (simple) ----
-document.addEventListener("click", (e)=>{
-  const t = e.target.closest("[data-tab]");
-  if (!t) return;
-  const key = t.dataset.tab;
-  document.querySelectorAll("[data-tab]").forEach(b=> b.classList.toggle("active", b===t));
-  document.querySelectorAll(".tab").forEach(el=> el.classList.remove("active"));
-  document.getElementById(`tab-${key}`)?.classList.add("active");
-});
+// ---- Tabs (simple, using the two buttons you added) ----
+(function wireTopTabs(){
+  const btnMatches = document.getElementById('tabbtn-matches');
+  const btnDuos = document.getElementById('tabbtn-duos');
+  const tabMatches = document.getElementById('tab-matches');
+  const tabDuos = document.getElementById('tab-duos');
+  if (!btnMatches || !btnDuos || !tabMatches || !tabDuos) return;
+
+  function show(which){
+    const isMatches = which === 'matches';
+    tabMatches.classList.toggle('active', isMatches);
+    tabDuos.classList.toggle('active', !isMatches);
+    btnMatches.classList.toggle('active', isMatches);
+    btnDuos.classList.toggle('active', !isMatches);
+  }
+  btnMatches.addEventListener('click', () => show('matches'));
+  btnDuos.addEventListener('click', () => show('duos'));
+})();
 
 // ---- Filters ----
 filters.addEventListener("click", (e)=>{
@@ -113,7 +122,7 @@ function setLastUpdated(ts){ lastUpdatedEl.textContent = ts ? `Last updated, ${n
 const esc = (s)=> String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
 const stripTags = (html)=> String(html||"").replace(/<[^>]*>/g,"");
 
-/* ------- Tooltips (items & date) ------- */
+// tooltips
 const tipEl = (()=>{ const d=document.createElement('div'); d.id='tooltip'; document.body.appendChild(d); return d; })();
 function showTip(html, x, y){
   tipEl.innerHTML = String(html).replace(/\n/g,"<br>");
@@ -142,7 +151,7 @@ function itemTip(id){
   return `<strong>${name}${cost}</strong>\n${desc}`;
 }
 
-/* Hide only the Arena trinket Arcane Sweeper */
+/* hide only the Arena trinket Arcane Sweeper */
 function isArcaneSweeper(id){
   const rec = ITEM_DB.byId?.[String(id)];
   if (!rec) return false;
@@ -150,14 +159,30 @@ function isArcaneSweeper(id){
 }
 
 // ---- Data loads ----
-async function fetchJSON(url, tries=3, delay=600){
-  const r = await fetch(url);
-  if (r.ok) return r.json();
-  const txt = await r.text().catch(()=> "");
-  const is429 = r.status===429 || /Riot 429/i.test(txt);
-  if (is429 && tries>0){ await new Promise(r=>setTimeout(r, delay)); return fetchJSON(url, tries-1, delay*2); }
-  throw new Error(`Request failed, ${r.status}${txt?`, ${txt}`:""}`);
+async function fetchJSON(url, opts = {}){
+  const { tries = 3, delay = 600, timeout = 15000 } = opts;
+  const controller = new AbortController();
+  const to = setTimeout(() => controller.abort(), timeout);
+  try {
+    const r = await fetch(url, { signal: controller.signal });
+    const txt = await r.text().catch(()=> "");
+    if (r.ok) {
+      try { return JSON.parse(txt); } catch { return txt; }
+    }
+    const is429 = r.status === 429 || /Riot 429/i.test(txt);
+    if (is429 && tries > 0){
+      await new Promise(r => setTimeout(r, delay));
+      return fetchJSON(url, { tries: tries - 1, delay: delay * 2, timeout });
+    }
+    throw new Error(`Request failed, ${r.status}${txt?`, ${txt}`:""}`);
+  } catch (e){
+    if (e.name === "AbortError") throw new Error("Request timed out");
+    throw e;
+  } finally {
+    clearTimeout(to);
+  }
 }
+
 async function initDDragon(){
   try {
     const r = await fetch("https://ddragon.leagueoflegends.com/api/versions.json");
@@ -168,6 +193,7 @@ async function initDDragon(){
     if (r.ok){ const data = await r.json(); ITEM_DB.byId = data.data || {}; }
   } catch {}
 }
+
 function loadCache(puuid){
   try { const v = localStorage.getItem(cacheKey(puuid)); if (v) return JSON.parse(v); } catch {}
   const fallbacks = [`arena_cache_v7.2:${puuid}`, `arena_cache_v7:${puuid}`];
@@ -175,7 +201,15 @@ function loadCache(puuid){
   return null;
 }
 function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
-function createStatus(){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; document.body.prepend(el); return el; }
+function createStatus(){
+  const existing = document.getElementById("status");
+  if (existing) return existing;
+  const el = document.createElement("div");
+  el.id = "status";
+  el.className = "container muted";
+  document.body.prepend(el);
+  return el;
+}
 function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
 
 // Progress helpers
@@ -183,7 +217,7 @@ function showIndeterminate(msg){ progressWrap.hidden=false; progressBar.classLis
 function showDeterminate(msg,pct){ progressWrap.hidden=false; progressBar.classList.remove('indeterminate'); progressBar.style.width=`${Math.max(0,Math.min(100,pct))}%`; progressText.textContent=msg||''; }
 function hideProgress(){ progressWrap.hidden=true; progressBar.classList.remove('indeterminate'); progressBar.style.width='0%'; progressText.textContent=''; }
 
-// URL prefill & autorun
+// URL prefill and autorun
 function prefillFromURL(){
   const u = new URL(location.href);
   const id = u.searchParams.get('id');
@@ -204,7 +238,7 @@ async function onSearch(e){
   await initDDragon();
 
   try{
-    status("Looking up account…");
+    status("Looking up account, …");
     const acc = await fetchJSON(api(`/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`));
     CURRENT.gameName = acc.gameName; CURRENT.tagLine = acc.tagLine; CURRENT.puuid = acc.puuid;
     CURRENT.region = mapRegionUItoRouting(regionSelect.value);
@@ -216,10 +250,9 @@ async function onSearch(e){
       renderAll();
       setLastUpdated(cached.updatedAt);
       status(""); hideProgress();
-      return; // no auto-refresh: user clicks Update if quiser
+      return;
     }
 
-    // First time
     Object.assign(CURRENT, { matches: [], ids: [], lastUpdated: null });
     await refresh(true);
   } catch(err){ console.error(err); status(err.message || "Error"); hideProgress(); }
@@ -229,11 +262,11 @@ async function refresh(full){
   if (!CURRENT.puuid) return;
   try{
     // 1) IDs
-    showIndeterminate("Fetching match IDs…");
+    showIndeterminate("Fetching match IDs, …");
     let allIds = [];
     let start = 0;
     for (;;) {
-      progressText.textContent = `Fetching match IDs… ${start}–${start + PAGE_SIZE - 1}`;
+      progressText.textContent = `Fetching match IDs, ${start}–${start + PAGE_SIZE - 1}`;
       const ids = await fetchJSON(api(`/match-ids?puuid=${CURRENT.puuid}&region=${CURRENT.region}&queue=${ARENA_QUEUE}&start=${start}&count=${PAGE_SIZE}`));
       if (!ids.length) break;
       allIds.push(...ids);
@@ -248,7 +281,7 @@ async function refresh(full){
     const toFetch = allIds.filter(id=>!known.has(id));
     const total = toFetch.length;
     let fetched = 0;
-    showDeterminate(`Fetching match details… 0 / ${total}`, 0);
+    showDeterminate(`Fetching match details, 0 / ${total}`, 0);
 
     let collected = [];
     for (let i=0;i<toFetch.length;i+=CHUNK_SIZE){
@@ -257,11 +290,11 @@ async function refresh(full){
       collected = collected.concat(part);
       fetched += slice.length;
       const pct = total ? Math.round((100*fetched)/total) : 100;
-      showDeterminate(`Fetching match details… ${Math.min(fetched,total)} / ${total}`, pct);
+      showDeterminate(`Fetching match details, ${Math.min(fetched,total)} / ${total}`, pct);
       renderHistory(dedupeById(CURRENT.matches.concat(collected)).sort((a,b)=>b.gameStart-a.gameStart));
     }
 
-    // 3) Merge + cache + render
+    // 3) Merge and cache and render
     CURRENT.matches = dedupeById(collected.concat(CURRENT.matches)).sort((a,b)=>b.gameStart-a.gameStart);
 
     const payload = { matches: CURRENT.matches, ids: CURRENT.ids, region: CURRENT.region, updatedAt: Date.now() };
@@ -292,7 +325,7 @@ function renderKPIs(){
   const total = list.length;
   const champs = new Set(list.map(m=>m.championName)).size;
   kpisBox.innerHTML = [
-    tile(`${CURRENT.gameName ? `${CURRENT.gameName}#${CURRENT.tagLine}` : "—"}`,"Player"),
+    tile(`${CURRENT.gameName ? `${CURRENT.gameName}#${CURRENT.tagLine}` : ","}`,"Player"),
     tile(`${total}`,"Games loaded"),
     tile(`${avg}`,"Average place"),
     tile(`${wins}`,"1st places"),
@@ -348,7 +381,6 @@ function renderHistory(forcedList){
         <img src="${champIcon(m.allyChampionName)}" alt="${m.allyChampionName}">
       </div>` : "";
 
-    // items (hide Arcane Sweeper if present)
     const ids = [m.item0,m.item1,m.item2,m.item3,m.item4,m.item5,m.item6]
       .filter(v => Number.isFinite(v) && v>0)
       .filter(id => !isArcaneSweeper(id));
@@ -386,7 +418,7 @@ function renderSynergy(){
   }
   const rows = Object.values(agg)
     .filter(x=>x.ally!=="Unknown")
-    .map(x=>({ ...x, wr: x.games ? Math.round((100*x.wins)/x.games) : 0, avg: x.games ? (x.sumPlace/x.games).toFixed(2) : "—" }));
+    .map(x=>({ ...x, wr: x.games ? Math.round((100*x.wins)/x.games) : 0, avg: x.games ? (x.sumPlace/x.games).toFixed(2) : "," }));
 
   if (bestDuoEl && commonDuoEl) {
     const enough = rows.filter(x => x.games >= 5);
@@ -411,7 +443,7 @@ function renderSynergy(){
     : `<tr><td colspan="5" class="muted">Play with a duo to see stats.</td></tr>`;
 }
 
-// Best Duo Partners (by player; group by allyPuuid)
+// Best Duo Partners, by player
 function renderDuos(){
   const agg = new Map();
   const nameMap = new Map();
@@ -430,7 +462,7 @@ function renderDuos(){
   const rows = [...agg.values()].map(s => {
     const name = s.puuid ? (nameMap.get(s.puuid) || s.display || "Unknown") : s.display;
     const wr = s.games ? Math.round((100*s.wins)/s.games) : 0;
-    const avg = s.games ? (s.sumPlace/s.games).toFixed(2) : "—";
+    const avg = s.games ? (s.sumPlace/s.games).toFixed(2) : ",";
     return { name, games: s.games, wins: s.wins, wr, avg };
   }).sort((a,b)=> b.games - a.games);
 
@@ -470,7 +502,6 @@ function populateChampionDatalist(){
 function groupBy(list, fn){ const map={}; for(const x of list){ const k=fn(x); (map[k] ||= []).push(x); } return map; }
 function tile(big,label){ return `<div class="tile"><div class="big">${big}</div><div class="label muted">${label}</div></div>`; }
 
-/* Placement chart */
 function drawPlacementBars(canvas, counts){
   const ctx = canvas.getContext("2d"); if(!ctx) return;
   const W=canvas.width, H=canvas.height;
@@ -511,67 +542,20 @@ function drawPlacementBars(canvas, counts){
 // kick off
 prefillFromURL();
 
-// force current logo, prevent old one coming back
+// force current logo
 (function fixBrandLogo(){
   const logo = document.getElementById('brand-logo');
   const word = document.getElementById('brand-wordmark');
-  if (logo) logo.src = 'logo.png?v=2';
-  if (word) word.src = 'wordmark.png?v=2';
+  if (logo) logo.src = 'logo-ar-icon.png?v=4';
+  if (word) word.src = 'logo-ar-wordmark.png?v=4';
 })();
 
-// top two buttons toggle for existing tabs
-(function wireTopTabs(){
-  const btnMatches = document.getElementById('tabbtn-matches');
-  const btnDuos = document.getElementById('tabbtn-duos');
-  const tabMatches = document.getElementById('tab-matches');
-  const tabDuos = document.getElementById('tab-duos');
-  if (!btnMatches || !btnDuos || !tabMatches || !tabDuos) return;
-
-  function show(which){
-    const isMatches = which === 'matches';
-    tabMatches.classList.toggle('active', isMatches);
-    tabDuos.classList.toggle('active', !isMatches);
-    btnMatches.classList.toggle('active', isMatches);
-    btnDuos.classList.toggle('active', !isMatches);
-  }
-  btnMatches.addEventListener('click', () => show('matches'));
-  btnDuos.addEventListener('click', () => show('duos'));
-})();
-
-// 1) force current logo, prevent old one showing again
-(function fixBrandLogo(){
-  try{
-    const logo = document.getElementById('brand-logo');
-    const word = document.getElementById('brand-wordmark');
-    if (logo) logo.src = 'logo.png?v=3';
-    if (word) word.src = 'wordmark.png?v=3';
-  }catch(e){}
-})();
-
-// 2) wire the two buttons to toggle your existing tabs
-(function wireTopTabs(){
-  const btnMatches = document.getElementById('tabbtn-matches');
-  const btnDuos = document.getElementById('tabbtn-duos');
-  const tabMatches = document.getElementById('tab-matches');
-  const tabDuos = document.getElementById('tab-duos');
-  if (!btnMatches || !btnDuos || !tabMatches || !tabDuos) return;
-
-  function show(which){
-    const isMatches = which === 'matches';
-    tabMatches.classList.toggle('active', isMatches);
-    tabDuos.classList.toggle('active', !isMatches);
-    btnMatches.classList.toggle('active', isMatches);
-    btnDuos.classList.toggle('active', !isMatches);
-  }
-  btnMatches.addEventListener('click', () => show('matches'));
-  btnDuos.addEventListener('click', () => show('duos'));
-})();
-
-// 3) safety, show errors instead of infinite "Looking up account…"
+// errors, show instead of infinite spinner
 (function watchErrors(){
   const $status = document.getElementById('status');
   function showStatus(msg){
     if ($status) $status.textContent = msg;
+    console.error(msg);
   }
   window.addEventListener('error', (e) => {
     showStatus('Error, ' + (e.error?.message || e.message || 'unknown'));
@@ -581,4 +565,3 @@ prefillFromURL();
     showStatus('Error, ' + msg);
   });
 })();
-
