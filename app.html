@@ -2,24 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>ARenas.gg, Arena profile</title>
+  <title>ARenas.gg — Arena profile</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="icon" href="logo-ar-icon.png?v=6">
-  <link rel="stylesheet" href="styles.css?v=build12">
+  <link rel="icon" href="logo.png?v=3">
+  <link rel="stylesheet" href="styles.css?v=build16">
 </head>
 <body>
   <header class="topbar">
     <div class="container">
       <div class="brand">
-        <!-- ONE logo: wordmark on desktop, icon on mobile -->
-        <a href="./" class="logo-link" aria-label="ARenas.gg">
-          <picture id="brand-picture">
-            <source media="(min-width:960px)" srcset="logo-ar-wordmark.png?v=6">
-            <img src="logo-ar-icon.png?v=6" alt="ARenas.gg" height="28">
-          </picture>
-        </a>
+        <img id="brand-logo" src="logo.png?v=3" alt="AR">
+        <img id="brand-wordmark" class="word" src="wordmark.png?v=3" alt="ARenas.gg">
       </div>
-
       <form id="search-form" class="search" autocomplete="off">
         <select id="region-select" aria-label="Region">
           <option value="EUW">EUW</option>
@@ -33,12 +27,11 @@
     </div>
   </header>
 
-  <!-- Blitz-like top tabs -->
+  <!-- small two button header -->
   <div class="container" style="margin-top:8px">
-    <nav class="top-tabs" role="tablist">
-      <button data-tab="matches" class="tabbtn active" role="tab" aria-selected="true">Overview</button>
-      <button data-tab="synergy" class="tabbtn" role="tab" aria-selected="false">Champion Pool</button>
-      <button data-tab="duos" class="tabbtn" role="tab" aria-selected="false">Duo Partners</button>
+    <nav class="top-tabs" id="top-tabs">
+      <button id="tabbtn-matches" class="tabbtn active" data-tab="matches">Info and Matches</button>
+      <button id="tabbtn-duos" class="tabbtn" data-tab="duos">Duo Partners</button>
     </nav>
   </div>
 
@@ -131,9 +124,9 @@
   </main>
 
   <footer class="footer muted small">
-    ARenas.gg, fan site, data © Riot Games.
+    ARenas.gg (fan site) — data © Riot Games.
   </footer>
 
-  <script src="app.js?v=build15"></script>
+  <script src="app.js?v=build16"></script>
 </body>
 </html>
