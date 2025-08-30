@@ -11,7 +11,6 @@ const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Kha
 const ITEM_DB = { byId:{} };
 const AUG_DB = { byId:{} };
 
-// icons & misc
 function champIcon(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/champion/${encodeURIComponent(fixed)}.png`; }
 function itemIcon(id){ return !id||id===0 ? "" : `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/img/item/${id}.png`; }
 function splashUrl(name){ const fixed = NAME_FIX[name] || name; return `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${encodeURIComponent(fixed)}_0.jpg`; }
@@ -21,18 +20,6 @@ const esc = (s)=> String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/
 const stripTags = (html)=> String(html||"").replace(/<[^>]*>/g,"");
 
 async function fetchJSON(url){ const r = await fetch(url); if (!r.ok) throw new Error(`${r.status}`); return r.json(); }
-
-/* ---- global itemTip binding + shared item DB ---- */
-window.ITEM_DB = window.ITEM_DB || { byId:{} };
-function itemTip(id){
-  const rec = (window.ITEM_DB.byId || {})[String(id)];
-  if (!rec) return `Item ${id}`;
-  const name = rec.name || `Item ${id}`;
-  const cost = rec.gold && rec.gold.total ? ` • ${rec.gold.total}g` : "";
-  const desc = rec.plaintext || String(rec.description||"").replace(/<[^>]*>/g, "");
-  return `<strong>${name}${cost}</strong>\n${desc}`;
-}
-window.itemTip = itemTip;
 
 // Tooltip
 const tipEl = document.getElementById("tooltip");
@@ -61,7 +48,7 @@ async function initDDragon(){
   } catch {}
   try {
     const r = await fetch(`https://ddragon.leagueoflegends.com/cdn/${DD_VERSION}/data/en_US/item.json`);
-    if (r.ok){ const data = await r.json(); ITEM_DB.byId = data.data || {}; window.ITEM_DB.byId = ITEM_DB.byId; }
+    if (r.ok){ const data = await r.json(); ITEM_DB.byId = data.data || {}; }
   } catch {}
 }
 function isArcaneSweeper(id){
@@ -69,8 +56,16 @@ function isArcaneSweeper(id){
   if (!rec) return false;
   return /arcane\s*sweeper/i.test(rec.name || "");
 }
+function itemTip(id){
+  const rec = ITEM_DB.byId?.[String(id)];
+  if(!rec) return `Item ${id}`;
+  const name = rec.name || `Item ${id}`;
+  const cost = rec.gold?.total ? ` • ${rec.gold.total}g` : "";
+  const desc = rec.plaintext || stripTags(rec.description||"");
+  return `<strong>${name}${cost}</strong>\n${desc}`;
+}
 
-/* Augments — prefer the “cherry-augments” list (has icons); fall back to cdragon arena */
+/* Augments — use the official cherry-augments list (has icons) */
 async function initAugments(){
   const KEY = "arena_aug_db_v2";
   try {
@@ -80,11 +75,13 @@ async function initAugments(){
 
   let raw = null;
 
+  // preferred – client game-data list with iconPath
   try{
     const r = await fetch("https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/cherry-augments.json", { cache: "force-cache" });
     if (r.ok) raw = await r.json();
   }catch{}
 
+  // fallback – older cdragon export
   if (!raw){
     const r = await fetch("https://raw.communitydragon.org/latest/cdragon/arena/en_us.json", { cache: "force-cache" });
     raw = await r.json();
@@ -97,22 +94,18 @@ async function initAugments(){
     const name = a.name || a.displayName || a.apiName || `Augment ${id}`;
     const iconPath = (a.iconPath || a.icon || a.imagePath || "").replace(/^\/+/, "");
     const icon = iconPath ? `https://raw.communitydragon.org/latest/${iconPath}` : "";
-
-    let desc = a.shortDesc || a.tooltipSimple || a.tooltip || a.longDesc || a.description || "";
+    let desc = a.longDesc || a.description || a.tooltip || a.tooltipSimple || "";
     desc = String(desc)
       .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/%[^%]+%/g, "")
       .replace(/@[^@]+@/g, "")
       .replace(/\s+/g," ")
       .trim();
-
     byId[id] = { id, name, icon, desc };
   }
 
   AUG_DB.byId = byId;
   try { localStorage.setItem(KEY, JSON.stringify({ byId })); } catch {}
 }
-
 function getAugmentIds(p){
   const out = [];
   if (Array.isArray(p.playerAugmentIds)) out.push(...p.playerAugmentIds);
@@ -177,7 +170,7 @@ const teamsBox = document.getElementById("teams");
     return teamCard(place, pair, focus, region);
   }).join("");
 
-  // Single, non-repeating splash
+  // Single, non-repeating splash (body styles ensure no repeat)
   const champSplash = pairChampForSplash(parts, focus);
   if (champSplash){
     document.body.style.backgroundImage =
