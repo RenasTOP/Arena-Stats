@@ -1,4 +1,3 @@
-// js/arena-strings.js
 window.ArenaStrings = window.ArenaStrings || {};
 
 window.ArenaStrings.get = async function(locale = 'en_us'){
