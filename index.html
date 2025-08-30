@@ -5,19 +5,19 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ARenas.gg</title>
   <link rel="icon" type="image/png" href="logo-ar-icon.png" />
-  <link rel="stylesheet" href="styles.css?v=build19" />
+  <link rel="stylesheet" href="styles.css?v=build10" />
 </head>
 <body class="home">
   <main class="hero">
     <img src="logo-ar-wordmark.png" alt="ARenas.gg" class="logo">
     <p class="tagline">Arena stats, win tracking, and duo insights.</p>
-    <form id="home-search" class="home-search" autocomplete="off">
-      <select id="home-region" aria-label="Region">
+    <form id="home-search" class="home-search">
+      <select id="home-region">
         <option>NA</option>
         <option selected>EUW</option>
         <option>EUNE</option>
       </select>
-      <input id="home-riotid" placeholder="Riot ID (Name#TAG)" required />
+      <input id="home-riotid" placeholder="Riot ID (Name#TAG)" />
       <button type="submit">Search</button>
     </form>
     <small class="muted">Powered by Riot Games API • Icons by Data Dragon</small>
