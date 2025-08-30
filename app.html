@@ -5,12 +5,13 @@
   <title>ARenas.gg — Arena profile</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="logo.png?v=3">
-  <link rel="stylesheet" href="styles.css?v=build16">
+  <link rel="stylesheet" href="styles.css?v=build17">
 </head>
 <body>
   <header class="topbar">
     <div class="container">
       <div class="brand">
+        <!-- show icon on mobile, wordmark on desktop (CSS handles swap) -->
         <img id="brand-logo" src="logo.png?v=3" alt="AR">
         <img id="brand-wordmark" class="word" src="wordmark.png?v=3" alt="ARenas.gg">
       </div>
@@ -27,15 +28,15 @@
     </div>
   </header>
 
-  <!-- small two button header -->
+  <div id="status" class="container muted"></div>
+
+  <!-- Top tab buttons -->
   <div class="container" style="margin-top:8px">
     <nav class="top-tabs" id="top-tabs">
       <button id="tabbtn-matches" class="tabbtn active" data-tab="matches">Info and Matches</button>
       <button id="tabbtn-duos" class="tabbtn" data-tab="duos">Duo Partners</button>
     </nav>
   </div>
-
-  <div id="status" class="container muted"></div>
 
   <main class="container">
     <div class="kpis" id="kpis"></div>
@@ -127,6 +128,6 @@
     ARenas.gg (fan site) — data © Riot Games.
   </footer>
 
-  <script src="app.js?v=build16"></script>
+  <script src="app.js?v=build17"></script>
 </body>
 </html>
