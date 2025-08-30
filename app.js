@@ -1,10 +1,12 @@
-// Arena.gg frontend
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
+// Arena.gg frontend — safe 10-id chunks to avoid Cloudflare subrequest limits
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
 const ARENA_QUEUE = 1700;
 
-const PAGE_SIZE = 100;
-const CHUNK_SIZE = 10;
+const PAGE_SIZE = 100;      // Riot max for /match-ids
+const CHUNK_SIZE = 10;      // <= worker MAX_IDS_PER_REQ (12)
 const IDS_PAGE_DELAY = 200;
+
+// Keep version stable so we don't blow away cache accidentally
 const CACHE_VERSION = "v8";
 
 function api(pathAndQuery){
@@ -48,25 +50,24 @@ const progressWrap = document.getElementById("progress-wrap");
 const progressBar  = document.getElementById("progress-bar");
 const progressText = document.getElementById("progress-text");
 
-// Status line
-const statusBox = createStatus();
+// Status line (use the one in DOM; hidden by CSS when empty)
+const statusBox = document.getElementById("status");
 
 // ---- State ----
 let DD_VERSION = "15.16.1";
 const NAME_FIX = { FiddleSticks:"Fiddlesticks", Wukong:"MonkeyKing", KhaZix:"Khazix", VelKoz:"Velkoz", ChoGath:"Chogath", KaiSa:"Kaisa", LeBlanc:"Leblanc", DrMundo:"DrMundo", Nunu:"Nunu", Renata:"Renata", RekSai:"RekSai", KogMaw:"KogMaw", BelVeth:"Belveth", TahmKench:"TahmKench" };
 const ITEM_DB = { byId:{} };
 
-/* ---- global itemTip binding + shared item DB ---- */
+// --- shared item tooltip helper (global) ---
 window.ITEM_DB = window.ITEM_DB || { byId:{} };
-function itemTip(id){
+window.itemTip = window.itemTip || function itemTip(id){
   const rec = (window.ITEM_DB.byId || {})[String(id)];
   if (!rec) return `Item ${id}`;
   const name = rec.name || `Item ${id}`;
   const cost = rec.gold && rec.gold.total ? ` • ${rec.gold.total}g` : "";
   const desc = rec.plaintext || String(rec.description||"").replace(/<[^>]*>/g, "");
   return `<strong>${name}${cost}</strong>\n${desc}`;
-}
-window.itemTip = itemTip;
+};
 
 let CURRENT = {
   gameName: "", tagLine: "",
@@ -80,10 +81,9 @@ let CURRENT = {
 
 const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
 
-/* ---------- Pins & Recents (with cleanup to avoid [object Object]) ---------- */
+/* ---------- Pins & Recents ---------- */
 const PIN_KEY = "arena_pins_v1";
 const RECENT_KEY = "arena_recent_v1";
-
 function toIdString(x){
   if (!x) return "";
   if (typeof x === "string") return x;
@@ -137,7 +137,7 @@ function updatePinButton(){
   btnPin.textContent = isPinned(id) ? "★ Unpin" : "★ Pin";
 }
 
-// ---- Tabs ----
+// ---- Tabs (simple) ----
 document.addEventListener("click", (e)=>{
   const t = e.target.closest("[data-tab]");
   if (!t) return;
@@ -186,7 +186,7 @@ function itemIcon(id){ return !id||id===0 ? "" : `https://ddragon.leagueoflegend
 function itemName(id){ const rec = ITEM_DB.byId?.[String(id)]; return rec ? rec.name : `Item ${id}`; }
 function ordinal(n){ if(n===1) return "1st"; if(n===2) return "2nd"; if(n===3) return "3rd"; if(!Number.isFinite(n)) return "?"; return `${n}th`; }
 function timeAgo(ts){ if(!ts) return "unknown"; const s=Math.max(1,Math.floor((Date.now()-Number(ts))/1000)); const m=Math.floor(s/60); if(m<60) return `${m}m ago`; const h=Math.floor(m/60); if(h<48) return `${h}h ago`; const d=Math.floor(h/24); return `${d}d ago`; }
-function status(t){ statusBox.textContent = t||""; }
+function status(t){ if (statusBox) statusBox.textContent = t||""; }
 function setLastUpdated(ts){ lastUpdatedEl.textContent = ts ? `Last updated, ${new Date(ts).toLocaleString()}` : ""; }
 const esc = (s)=> String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
 const stripTags = (html)=> String(html||"").replace(/<[^>]*>/g,"");
@@ -244,7 +244,6 @@ function loadCache(puuid){
   return null;
 }
 function saveCache(puuid, payload){ try { localStorage.setItem(cacheKey(puuid), JSON.stringify(payload)); } catch {} }
-function createStatus(){ const el=document.createElement("div"); el.id="status"; el.className="container muted"; document.body.prepend(el); return el; }
 function mapRegionUItoRouting(ui){ if ((ui||"").toLowerCase()==="na") return "americas"; return "europe"; }
 
 // Progress helpers
@@ -273,7 +272,7 @@ async function onSearch(e){
   await initDDragon();
 
   try{
-    status("Looking up account…");
+    status(""); // stay silent
     const acc = await fetchJSON(api(`/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`));
     CURRENT.gameName = acc.gameName; CURRENT.tagLine = acc.tagLine; CURRENT.puuid = acc.puuid;
     CURRENT.region = mapRegionUItoRouting(regionSelect.value);
@@ -287,9 +286,8 @@ async function onSearch(e){
       populateChampionDatalist();
       renderAll();
       setLastUpdated(cached.updatedAt);
-      status("Loaded from cache. Click Update to refresh.");
       hideProgress();
-      return;
+      return; // user can click Update when they want
     }
 
     Object.assign(CURRENT, { matches: [], ids: [], lastUpdated: null });
@@ -343,7 +341,7 @@ async function refresh(full){
     populateChampionDatalist();
     renderAll();
     hideProgress();
-    status(`Updated. ${collected.length} new ${collected.length===1?"match":"matches"} added.`);
+    status(""); // no banner
   } catch(err){
     console.error(err);
     status(err.message || "Refresh failed");
@@ -420,6 +418,7 @@ function renderHistory(forcedList){
         <img src="${champIcon(m.allyChampionName)}" alt="${m.allyChampionName}">
       </div>` : "";
 
+    // items (hide Arcane Sweeper if present)
     const ids = [m.item0,m.item1,m.item2,m.item3,m.item4,m.item5,m.item6]
       .filter(v => Number.isFinite(v) && v>0)
       .filter(id => !isArcaneSweeper(id));
@@ -583,21 +582,24 @@ function drawPlacementBars(canvas, counts){
 prefillFromURL();
 renderPinsRecents();
 
-// force logo versions (in case of stale cache)
+// force current logo (avoid old cache)
 (function fixBrandLogo(){
-  const logo = document.getElementById('brand-logo');
-  const word = document.getElementById('brand-wordmark');
-  if (logo) logo.src = 'logo.png?v=3';
-  if (word) word.src = 'wordmark.png?v=3';
+  try{
+    const logo = document.getElementById('brand-logo');
+    const word = document.getElementById('brand-wordmark');
+    if (logo) logo.src = 'logo.png?v=3';
+    if (word) word.src = 'wordmark.png?v=3';
+  }catch(e){}
 })();
 
-// wire tabs
+// wire the top two buttons to toggle tabs
 (function wireTopTabs(){
   const btnMatches = document.getElementById('tabbtn-matches');
   const btnDuos = document.getElementById('tabbtn-duos');
   const tabMatches = document.getElementById('tab-matches');
   const tabDuos = document.getElementById('tab-duos');
   if (!btnMatches || !btnDuos || !tabMatches || !tabDuos) return;
+
   function show(which){
     const isMatches = which === 'matches';
     tabMatches.classList.toggle('active', isMatches);
@@ -609,7 +611,7 @@ renderPinsRecents();
   btnDuos.addEventListener('click', () => show('duos'));
 })();
 
-// show errors instead of hanging
+// show only errors in status line
 (function watchErrors(){
   const $status = document.getElementById('status');
   function showStatus(msg){ if ($status) $status.textContent = msg; }
