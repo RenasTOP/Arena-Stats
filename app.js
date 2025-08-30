@@ -1,12 +1,10 @@
-// Arena.gg frontend — safe 10-id chunks to avoid Cloudflare subrequest limits
-const API_BASE = "https://arenaproxy.irenasthat.workers.dev"; // no trailing slash
+// Arena.gg frontend
+const API_BASE = "https://arenaproxy.irenasthat.workers.dev";
 const ARENA_QUEUE = 1700;
 
-const PAGE_SIZE = 100;      // Riot max for /match-ids
-const CHUNK_SIZE = 10;      // <= worker MAX_IDS_PER_REQ (12)
+const PAGE_SIZE = 100;
+const CHUNK_SIZE = 10;
 const IDS_PAGE_DELAY = 200;
-
-// Keep version stable so we don't blow away cache accidentally
 const CACHE_VERSION = "v8";
 
 function api(pathAndQuery){
@@ -82,10 +80,29 @@ let CURRENT = {
 
 const cacheKey = (puuid)=>`arena_cache_${CACHE_VERSION}:${puuid}`;
 
-/* ---------- Pins & Recents ---------- */
+/* ---------- Pins & Recents (with cleanup to avoid [object Object]) ---------- */
 const PIN_KEY = "arena_pins_v1";
 const RECENT_KEY = "arena_recent_v1";
-function loadPins(){ try{ return JSON.parse(localStorage.getItem(PIN_KEY))||[] }catch{ return [] } }
+
+function toIdString(x){
+  if (!x) return "";
+  if (typeof x === "string") return x;
+  if (typeof x.gameName === "string" && typeof x.tagLine === "string") return `${x.gameName}#${x.tagLine}`;
+  if (x.name && x.tag) return `${x.name}#${x.tag}`;
+  return "";
+}
+function cleanList(key){
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(key)||"[]"); } catch {}
+  const out = [];
+  for (const it of list){
+    const s = toIdString(it);
+    if (s && !out.includes(s)) out.push(s);
+  }
+  try { localStorage.setItem(key, JSON.stringify(out.slice(0,30))); } catch {}
+  return out;
+}
+function loadPins(){ return cleanList(PIN_KEY); }
 function savePins(list){ try{ localStorage.setItem(PIN_KEY, JSON.stringify(list)); }catch{} }
 function isPinned(id){ return loadPins().includes(id); }
 function togglePin(id){
@@ -97,17 +114,15 @@ function togglePin(id){
   updatePinButton();
 }
 function pushRecent(id){
-  try{
-    const pins = new Set(loadPins());
-    let list = JSON.parse(localStorage.getItem(RECENT_KEY)||"[]").filter(x=>x && !pins.has(x));
-    list = [id, ...list.filter(x=>x!==id)].slice(0,30);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(list));
-  }catch{}
+  const rec = cleanList(RECENT_KEY);
+  const pins = new Set(loadPins());
+  const merged = [id, ...rec.filter(x => x !== id && !pins.has(x))].slice(0,30);
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(merged)); } catch {}
   renderPinsRecents();
 }
 function renderPinsRecents(){
   const pins = loadPins();
-  const rec = (JSON.parse(localStorage.getItem(RECENT_KEY)||"[]")||[]).filter(x=>!pins.includes(x));
+  const rec = cleanList(RECENT_KEY).filter(x=>!pins.includes(x));
   pinnedBox.innerHTML = pins.length ? pins.map(id =>
     `<a class="link-chip" href="./?id=${encodeURIComponent(id)}">${esc(id)}</a>`
   ).join("") : `<div class="muted small">Nothing pinned yet.</div>`;
@@ -405,7 +420,6 @@ function renderHistory(forcedList){
         <img src="${champIcon(m.allyChampionName)}" alt="${m.allyChampionName}">
       </div>` : "";
 
-    // items (hide Arcane Sweeper if present)
     const ids = [m.item0,m.item1,m.item2,m.item3,m.item4,m.item5,m.item6]
       .filter(v => Number.isFinite(v) && v>0)
       .filter(id => !isArcaneSweeper(id));
@@ -569,24 +583,21 @@ function drawPlacementBars(canvas, counts){
 prefillFromURL();
 renderPinsRecents();
 
-// force current logo (avoid old cache)
+// force logo versions (in case of stale cache)
 (function fixBrandLogo(){
-  try{
-    const logo = document.getElementById('brand-logo');
-    const word = document.getElementById('brand-wordmark');
-    if (logo) logo.src = 'logo.png?v=3';
-    if (word) word.src = 'wordmark.png?v=3';
-  }catch(e){}
+  const logo = document.getElementById('brand-logo');
+  const word = document.getElementById('brand-wordmark');
+  if (logo) logo.src = 'logo.png?v=3';
+  if (word) word.src = 'wordmark.png?v=3';
 })();
 
-// wire the top two buttons to toggle tabs
+// wire tabs
 (function wireTopTabs(){
   const btnMatches = document.getElementById('tabbtn-matches');
   const btnDuos = document.getElementById('tabbtn-duos');
   const tabMatches = document.getElementById('tab-matches');
   const tabDuos = document.getElementById('tab-duos');
   if (!btnMatches || !btnDuos || !tabMatches || !tabDuos) return;
-
   function show(which){
     const isMatches = which === 'matches';
     tabMatches.classList.toggle('active', isMatches);
@@ -598,7 +609,7 @@ renderPinsRecents();
   btnDuos.addEventListener('click', () => show('duos'));
 })();
 
-// safety: show errors instead of infinite "Looking up account…"
+// show errors instead of hanging
 (function watchErrors(){
   const $status = document.getElementById('status');
   function showStatus(msg){ if ($status) $status.textContent = msg; }
